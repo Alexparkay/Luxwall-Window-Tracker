@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,6 +15,7 @@ import {
 import BuildingControls from './BuildingControls';
 import WindowDisplay from './WindowDisplay';
 import { Building as BuildingType, useBuildingData } from '@/hooks/useBuildingData';
+import '../types/google-maps';
 
 const MapViewer = () => {
   const mapRef = useRef<HTMLDivElement>(null);
