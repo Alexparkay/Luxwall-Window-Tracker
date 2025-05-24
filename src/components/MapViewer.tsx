@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,7 +16,6 @@ import {
 import BuildingControls from './BuildingControls';
 import WindowDisplay from './WindowDisplay';
 import { Building as BuildingType, useBuildingData } from '@/hooks/useBuildingData';
-import '../types/google-maps';
 
 const MapViewer = () => {
   const mapRef = useRef<HTMLDivElement>(null);
@@ -136,10 +136,10 @@ const MapViewer = () => {
       return;
     }
 
-    const newWindowMarkers = windows.map(window => {
+    const newWindowMarkers = windows.map(windowData => {
       // Calculate position relative to building (this is simplified for demo)
-      const offsetLat = (window.y_coordinate - 50) * 0.00001; // Convert to lat offset
-      const offsetLng = (window.x_coordinate - 50) * 0.00001; // Convert to lng offset
+      const offsetLat = (windowData.y_coordinate - 50) * 0.00001; // Convert to lat offset
+      const offsetLng = (windowData.x_coordinate - 50) * 0.00001; // Convert to lng offset
       
       const marker = new window.google.maps.Marker({
         position: { 
@@ -147,7 +147,7 @@ const MapViewer = () => {
           lng: selectedBuilding.longitude + offsetLng 
         },
         map: map,
-        title: `Window (Floor ${window.floor_number})`,
+        title: `Window (Floor ${windowData.floor_number})`,
         icon: {
           url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -166,10 +166,10 @@ const MapViewer = () => {
         content: `
           <div>
             <h4 style="margin: 0 0 4px 0; color: #1f2937;">Window Details</h4>
-            <p style="margin: 2px 0; color: #6b7280; font-size: 12px;">Floor: ${window.floor_number}</p>
-            <p style="margin: 2px 0; color: #6b7280; font-size: 12px;">Type: ${window.window_type}</p>
-            <p style="margin: 2px 0; color: #6b7280; font-size: 12px;">Confidence: ${((window.confidence || 0) * 100).toFixed(1)}%</p>
-            ${window.width && window.height ? `<p style="margin: 2px 0; color: #6b7280; font-size: 12px;">Size: ${window.width.toFixed(1)}m × ${window.height.toFixed(1)}m</p>` : ''}
+            <p style="margin: 2px 0; color: #6b7280; font-size: 12px;">Floor: ${windowData.floor_number}</p>
+            <p style="margin: 2px 0; color: #6b7280; font-size: 12px;">Type: ${windowData.window_type}</p>
+            <p style="margin: 2px 0; color: #6b7280; font-size: 12px;">Confidence: ${((windowData.confidence || 0) * 100).toFixed(1)}%</p>
+            ${windowData.width && windowData.height ? `<p style="margin: 2px 0; color: #6b7280; font-size: 12px;">Size: ${windowData.width.toFixed(1)}m × ${windowData.height.toFixed(1)}m</p>` : ''}
           </div>
         `
       });
