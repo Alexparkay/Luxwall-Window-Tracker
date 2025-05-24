@@ -9,7 +9,130 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      buildings: {
+        Row: {
+          address: string | null
+          created_at: string
+          geometry: Json | null
+          google_place_id: string | null
+          id: string
+          latitude: number
+          longitude: number
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          created_at?: string
+          geometry?: Json | null
+          google_place_id?: string | null
+          id?: string
+          latitude: number
+          longitude: number
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          created_at?: string
+          geometry?: Json | null
+          google_place_id?: string | null
+          id?: string
+          latitude?: number
+          longitude?: number
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      detection_sessions: {
+        Row: {
+          building_id: string
+          completed_at: string | null
+          created_at: string
+          id: string
+          processing_time: unknown | null
+          status: string | null
+          total_windows: number | null
+        }
+        Insert: {
+          building_id: string
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          processing_time?: unknown | null
+          status?: string | null
+          total_windows?: number | null
+        }
+        Update: {
+          building_id?: string
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          processing_time?: unknown | null
+          status?: string | null
+          total_windows?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "detection_sessions_building_id_fkey"
+            columns: ["building_id"]
+            isOneToOne: false
+            referencedRelation: "buildings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      windows: {
+        Row: {
+          building_id: string
+          confidence: number | null
+          created_at: string
+          floor_number: number | null
+          height: number | null
+          id: string
+          width: number | null
+          window_type: string | null
+          x_coordinate: number
+          y_coordinate: number
+          z_coordinate: number | null
+        }
+        Insert: {
+          building_id: string
+          confidence?: number | null
+          created_at?: string
+          floor_number?: number | null
+          height?: number | null
+          id?: string
+          width?: number | null
+          window_type?: string | null
+          x_coordinate: number
+          y_coordinate: number
+          z_coordinate?: number | null
+        }
+        Update: {
+          building_id?: string
+          confidence?: number | null
+          created_at?: string
+          floor_number?: number | null
+          height?: number | null
+          id?: string
+          width?: number | null
+          window_type?: string | null
+          x_coordinate?: number
+          y_coordinate?: number
+          z_coordinate?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "windows_building_id_fkey"
+            columns: ["building_id"]
+            isOneToOne: false
+            referencedRelation: "buildings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
