@@ -17,13 +17,6 @@ import BuildingControls from './BuildingControls';
 import WindowDisplay from './WindowDisplay';
 import { Building as BuildingType, useBuildingData } from '@/hooks/useBuildingData';
 
-declare global {
-  interface Window {
-    google: any;
-    initMap: () => void;
-  }
-}
-
 const MapViewer = () => {
   const mapRef = useRef<HTMLDivElement>(null);
   const [map, setMap] = useState<any>(null);
@@ -42,7 +35,7 @@ const MapViewer = () => {
     window.initMap = initializeMap;
     
     // If Google Maps is already loaded, initialize immediately
-    if (window.google && window.google.maps) {
+    if (window.google?.maps) {
       initializeMap();
     }
   }, []);
@@ -62,7 +55,7 @@ const MapViewer = () => {
   }, [map, windows, showWindows, selectedBuilding]);
 
   const initializeMap = () => {
-    if (!mapRef.current || !window.google) return;
+    if (!mapRef.current || !window.google?.maps) return;
 
     console.log('Initializing Google Maps with 3D buildings...');
 
@@ -91,6 +84,8 @@ const MapViewer = () => {
   };
 
   const updateBuildingMarkers = () => {
+    if (!window.google?.maps) return;
+    
     // Clear existing building markers
     buildingMarkers.forEach(marker => marker.setMap(null));
     
@@ -131,6 +126,8 @@ const MapViewer = () => {
   };
 
   const updateWindowMarkers = () => {
+    if (!window.google?.maps) return;
+    
     // Clear existing window markers
     windowMarkers.forEach(marker => marker.setMap(null));
     
@@ -197,7 +194,7 @@ const MapViewer = () => {
   };
 
   const searchLocation = async () => {
-    if (!map || !searchQuery.trim()) return;
+    if (!map || !searchQuery.trim() || !window.google?.maps) return;
 
     console.log('Searching for location:', searchQuery);
 
