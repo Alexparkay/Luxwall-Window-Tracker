@@ -1,4 +1,5 @@
 
+
 import React, { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,8 +28,9 @@ const MapViewer = () => {
   const [showWindows, setShowWindows] = useState(false);
   const [buildingMarkers, setBuildingMarkers] = useState<any[]>([]);
   const [windowMarkers, setWindowMarkers] = useState<any[]>([]);
+  const [ctrlPressed, setCtrlPressed] = useState(false);
   
-  const { buildings, windows, selectedBuilding } = useBuildingData();
+  const { buildings, windows, selectedBuilding, setSelectedBuilding, fetchWindows, startWindowDetection } = useBuildingData();
 
   useEffect(() => {
     // Set up the global callback for Google Maps
@@ -39,6 +41,35 @@ const MapViewer = () => {
       initializeMap();
     }
   }, []);
+
+  // Handle keyboard events for Ctrl key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Control') {
+        setCtrlPressed(true);
+        if (map) {
+          map.setOptions({ gestureHandling: 'greedy' });
+        }
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Control') {
+        setCtrlPressed(false);
+        if (map) {
+          map.setOptions({ gestureHandling: 'cooperative' });
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [map]);
 
   // Update building markers when buildings change
   useEffect(() => {
@@ -83,6 +114,30 @@ const MapViewer = () => {
     console.log('Map initialized successfully with 3D buildings');
   };
 
+  const handleBuildingClick = async (building: BuildingType) => {
+    console.log('Building clicked:', building.name);
+    
+    // Set as selected building
+    setSelectedBuilding(building);
+    
+    // Center map on building
+    if (map) {
+      map.setCenter({ lat: building.latitude, lng: building.longitude });
+      map.setZoom(20);
+      map.setTilt(45);
+      setCurrentLocation(building.address || building.name);
+    }
+    
+    // Fetch existing windows first
+    await fetchWindows(building.id);
+    
+    // Start window detection automatically
+    startWindowDetection(building.id);
+    
+    // Show windows
+    setShowWindows(true);
+  };
+
   const updateBuildingMarkers = () => {
     if (!window.google?.maps) return;
     
@@ -90,6 +145,8 @@ const MapViewer = () => {
     buildingMarkers.forEach(marker => marker.setMap(null));
     
     const newMarkers = buildings.map(building => {
+      const isSelected = selectedBuilding?.id === building.id;
+      
       const marker = new window.google.maps.Marker({
         position: { lat: building.latitude, lng: building.longitude },
         map: map,
@@ -97,7 +154,7 @@ const MapViewer = () => {
         icon: {
           url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M3 20V4C3 3.45 3.196 2.979 3.588 2.587C3.98 2.195 4.45 2 5 2H19C19.55 2 20.021 2.195 20.413 2.587C20.805 2.979 21 3.45 21 4V20L12 17L3 20Z" fill="#2563eb" stroke="#1e40af" stroke-width="1"/>
+              <path d="M3 20V4C3 3.45 3.196 2.979 3.588 2.587C3.98 2.195 4.45 2 5 2H19C19.55 2 20.021 2.195 20.413 2.587C20.805 2.979 21 3.45 21 4V20L12 17L3 20Z" fill="${isSelected ? '#dc2626' : '#2563eb'}" stroke="${isSelected ? '#b91c1c' : '#1e40af'}" stroke-width="1"/>
             </svg>
           `),
           scaledSize: new window.google.maps.Size(30, 30),
@@ -111,12 +168,14 @@ const MapViewer = () => {
           <div>
             <h3 style="margin: 0 0 8px 0; color: #1f2937;">${building.name}</h3>
             ${building.address ? `<p style="margin: 0; color: #6b7280; font-size: 14px;">${building.address}</p>` : ''}
+            <p style="margin: 4px 0 0 0; color: #2563eb; font-size: 12px; cursor: pointer;">Click marker to analyze windows</p>
           </div>
         `
       });
 
       marker.addListener('click', () => {
         infoWindow.open(map, marker);
+        handleBuildingClick(building);
       });
 
       return marker;
@@ -185,12 +244,7 @@ const MapViewer = () => {
   };
 
   const handleBuildingSelect = (building: BuildingType) => {
-    if (map) {
-      map.setCenter({ lat: building.latitude, lng: building.longitude });
-      map.setZoom(20);
-      map.setTilt(45);
-      setCurrentLocation(building.address || building.name);
-    }
+    handleBuildingClick(building);
   };
 
   const searchLocation = async () => {
@@ -355,6 +409,12 @@ const MapViewer = () => {
                 </Button>
               </div>
             </div>
+
+            {ctrlPressed && (
+              <div className="text-xs text-blue-600 bg-blue-50 p-2 rounded">
+                Rotation mode active - drag to rotate
+              </div>
+            )}
           </div>
         </Card>
 
@@ -365,18 +425,14 @@ const MapViewer = () => {
             <span className="text-sm font-medium text-gray-700">Current Location:</span>
           </div>
           <p className="text-sm text-gray-600 mt-1">{currentLocation}</p>
+          <div className="text-xs text-gray-500 mt-1">
+            Hold Ctrl + drag to rotate • Click buildings to analyze windows
+          </div>
         </Card>
-      </div>
-
-      {/* Instructions */}
-      <div className="bg-blue-50 p-3 text-center">
-        <p className="text-sm text-blue-800">
-          <strong>Instructions:</strong> Search and select buildings • Click "Detect Windows" to analyze • 
-          Toggle window visibility with the eye icon • Navigate with mouse controls
-        </p>
       </div>
     </div>
   );
 };
 
 export default MapViewer;
+
