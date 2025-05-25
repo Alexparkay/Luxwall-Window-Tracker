@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,7 +17,9 @@ import {
   Play,
   Loader2,
   Grid3X3,
-  MapPin
+  MapPin,
+  Clock,
+  Info
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Building as BuildingType, Window, useBuildingData } from '@/hooks/useBuildingData';
@@ -52,6 +53,7 @@ const MapViewer = () => {
   const [showMapControls, setShowMapControls] = useState(false);
   const [showAnalysisWidget, setShowAnalysisWidget] = useState(false);
   const [buildingSearchTerm, setBuildingSearchTerm] = useState('');
+  const [buildingHistory, setBuildingHistory] = useState<BuildingType[]>([]);
   
   const { buildings, windows, selectedBuilding, setSelectedBuilding, fetchWindows, startWindowDetection, saveBuilding, isLoading: buildingLoading } = useBuildingData();
 
@@ -71,14 +73,19 @@ const MapViewer = () => {
       if (e.key === 'Control' && !ctrlPressed) {
         setCtrlPressed(true);
         if (map) {
+          // Enable all rotation and gesture controls
           map.setOptions({ 
             gestureHandling: 'greedy',
             rotateControl: true,
             tiltControl: true,
             draggable: true,
-            scrollwheel: true
+            scrollwheel: true,
+            zoomControl: false,
+            mapTypeControl: false,
+            streetViewControl: false,
+            fullscreenControl: false
           });
-          console.log('Rotation mode enabled - Hold Ctrl and drag to rotate/tilt');
+          console.log('3D rotation mode enabled - Hold Ctrl and drag to rotate/tilt the view');
         }
       }
       
@@ -99,7 +106,7 @@ const MapViewer = () => {
             draggable: true,
             scrollwheel: true
           });
-          console.log('Rotation mode disabled');
+          console.log('3D rotation mode disabled');
         }
       }
     };
@@ -133,9 +140,9 @@ const MapViewer = () => {
       return;
     }
 
-    console.log('Initializing Google Maps with 3D buildings and Street View...');
+    console.log('Initializing Google Maps with 3D buildings and enhanced rotation...');
 
-    // Create map with 3D buildings enabled and proper rotation controls
+    // Create map with enhanced 3D controls
     const mapInstance = new window.google.maps.Map(mapRef.current, {
       center: { lat: 40.7614, lng: -73.9776 },
       zoom: 18,
@@ -153,7 +160,16 @@ const MapViewer = () => {
       fullscreenControl: false,
       gestureHandling: 'cooperative',
       draggable: true,
-      scrollwheel: true
+      scrollwheel: true,
+      // Enhanced for better 3D rotation
+      restriction: {
+        latLngBounds: {
+          north: 85,
+          south: -85,
+          west: -180,
+          east: 180,
+        },
+      },
     });
 
     // Initialize Street View
@@ -213,7 +229,7 @@ const MapViewer = () => {
     setMap(mapInstance);
     setIsLoading(false);
 
-    console.log('Map initialized successfully with autocomplete and Street View');
+    console.log('Map initialized successfully with enhanced 3D controls');
   };
 
   const handleMapClick = async (location: any) => {
@@ -256,6 +272,15 @@ const MapViewer = () => {
     
     setSelectedBuilding(building);
     setShowAnalysisWidget(true);
+    
+    // Add to building history if not already present
+    setBuildingHistory(prev => {
+      const exists = prev.find(b => b.id === building.id);
+      if (!exists) {
+        return [building, ...prev.slice(0, 9)]; // Keep last 10 buildings
+      }
+      return prev;
+    });
     
     if (map) {
       map.setCenter({ lat: building.latitude, lng: building.longitude });
@@ -522,8 +547,9 @@ const MapViewer = () => {
           </div>
         )}
 
-        {/* Streamlined Search Bar */}
-        <div className="absolute top-6 left-1/2 transform -translate-x-1/2 z-10">
+        {/* Top Bar - Search and Location */}
+        <div className="absolute top-6 left-1/2 transform -translate-x-1/2 z-10 flex items-center gap-4">
+          {/* Search Bar */}
           <div className="flex items-center gap-2 bg-white/20 backdrop-blur-md border border-white/30 rounded-full px-4 py-3 shadow-lg">
             <Input
               ref={autocompleteRef}
@@ -537,6 +563,14 @@ const MapViewer = () => {
               <Search className="w-4 h-4" />
             </Button>
           </div>
+
+          {/* Current Location Widget */}
+          <Card className="p-3 bg-white/10 backdrop-blur-md border border-white/20">
+            <div className="flex items-center gap-2">
+              <Navigation className="w-4 h-4 text-white" />
+              <span className="text-sm font-medium text-white">{currentLocation}</span>
+            </div>
+          </Card>
         </div>
 
         {/* Map Controls Toggle */}
@@ -614,68 +648,58 @@ const MapViewer = () => {
 
               {ctrlPressed && (
                 <div className="text-xs text-blue-200 bg-blue-500/20 p-2 rounded">
-                  Rotation mode active - Drag to rotate/tilt
+                  3D rotation active - Drag to rotate/tilt view
                 </div>
               )}
             </div>
           </Card>
         )}
 
-        {/* Combined Building Controls & Window Analysis Widget */}
+        {/* Enhanced Building Analysis Widget - Left Side */}
         {showAnalysisWidget && (
-          <Card className="absolute bottom-6 right-6 p-6 bg-white/10 backdrop-blur-md border border-white/20 max-w-md z-10 shadow-2xl">
-            <div className="space-y-4">
-              {/* Building Controls Section */}
-              <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <Building className="w-5 h-5 text-white" />
-                  <h3 className="font-semibold text-white">Building Analysis</h3>
-                  <Button
-                    onClick={() => setShowAnalysisWidget(false)}
-                    size="sm"
-                    variant="ghost"
-                    className="ml-auto text-white hover:bg-white/20"
-                  >
-                    <X className="w-4 h-4" />
-                  </Button>
-                </div>
+          <Card className="absolute top-6 left-6 bottom-6 w-96 p-6 bg-white/10 backdrop-blur-md border border-white/20 z-10 shadow-2xl overflow-y-auto">
+            <div className="space-y-6">
+              {/* Header */}
+              <div className="flex items-center gap-2 mb-4">
+                <Building className="w-6 h-6 text-white" />
+                <h2 className="text-xl font-bold text-white">Building Analysis Center</h2>
+                <Button
+                  onClick={() => setShowAnalysisWidget(false)}
+                  size="sm"
+                  variant="ghost"
+                  className="ml-auto text-white hover:bg-white/20"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
 
-                {/* Building Search */}
-                <div className="mb-3">
-                  <Input
-                    placeholder="Search buildings..."
-                    value={buildingSearchTerm}
-                    onChange={(e) => setBuildingSearchTerm(e.target.value)}
-                    className="bg-white/20 border-white/30 text-white placeholder-white/70 focus-visible:ring-white/50"
-                  />
-                </div>
-
-                {/* Building List */}
-                <div className="space-y-2 max-h-32 overflow-y-auto mb-3">
-                  {filteredBuildings.map((building) => (
-                    <div
-                      key={building.id}
-                      className={`p-2 rounded border cursor-pointer transition-colors ${
-                        selectedBuilding?.id === building.id
-                          ? 'bg-blue-500/30 border-blue-400'
-                          : 'hover:bg-white/20 border-white/30'
-                      }`}
-                      onClick={() => handleBuildingClick(building)}
-                    >
-                      <div className="font-medium text-sm text-white">{building.name}</div>
-                      {building.address && (
-                        <div className="text-xs text-white/70 flex items-center gap-1">
-                          <MapPin className="w-3 h-3" />
-                          {building.address}
-                        </div>
-                      )}
+              {/* Current Building Info */}
+              {selectedBuilding && (
+                <div className="bg-white/10 p-4 rounded-lg border border-white/20">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Info className="w-5 h-5 text-blue-400" />
+                    <h3 className="font-semibold text-white">Current Building</h3>
+                  </div>
+                  <div className="space-y-2 text-sm">
+                    <div className="text-white">{selectedBuilding.name}</div>
+                    {selectedBuilding.address && (
+                      <div className="text-white/70 flex items-center gap-1">
+                        <MapPin className="w-3 h-3" />
+                        {selectedBuilding.address}
+                      </div>
+                    )}
+                    <div className="text-white/70">
+                      Coords: {selectedBuilding.latitude.toFixed(6)}, {selectedBuilding.longitude.toFixed(6)}
                     </div>
-                  ))}
+                  </div>
                 </div>
+              )}
 
-                {/* Detection Controls */}
-                {selectedBuilding && (
-                  <div className="flex gap-2 mb-4">
+              {/* Detection Controls */}
+              {selectedBuilding && (
+                <div className="space-y-3">
+                  <h4 className="font-semibold text-white">Window Detection</h4>
+                  <div className="flex gap-2">
                     <Button
                       onClick={handleDetectWindows}
                       disabled={buildingLoading}
@@ -683,11 +707,11 @@ const MapViewer = () => {
                       className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
                     >
                       {buildingLoading ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
                       ) : (
-                        <Play className="w-4 h-4" />
+                        <Play className="w-4 h-4 mr-2" />
                       )}
-                      Detect Windows
+                      Analyze Building
                     </Button>
                     
                     <Button
@@ -699,45 +723,47 @@ const MapViewer = () => {
                       <Eye className="w-4 h-4" />
                     </Button>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
 
-              {/* Window Analysis Section */}
+              {/* Window Analysis Results */}
               {windows.length > 0 && showWindows && (
-                <div className="border-t border-white/20 pt-4">
-                  <div className="flex items-center gap-2 mb-3">
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
                     <Grid3X3 className="w-5 h-5 text-green-400" />
-                    <h4 className="font-semibold text-white">Window Analysis</h4>
+                    <h4 className="font-semibold text-white">Analysis Results</h4>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3 text-sm mb-3">
-                    <div className="bg-blue-500/20 p-3 rounded">
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className="bg-blue-500/20 p-3 rounded border border-blue-400/30">
                       <div className="font-medium text-blue-200">Total Windows</div>
-                      <div className="text-xl font-bold text-white">{windows.length}</div>
+                      <div className="text-2xl font-bold text-white">{windows.length}</div>
                     </div>
                     
-                    <div className="bg-green-500/20 p-3 rounded">
+                    <div className="bg-green-500/20 p-3 rounded border border-green-400/30">
                       <div className="font-medium text-green-200">Avg Confidence</div>
-                      <div className="text-xl font-bold text-white">
+                      <div className="text-2xl font-bold text-white">
                         {(avgConfidence * 100).toFixed(1)}%
                       </div>
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <div className="font-medium text-white">Windows by Floor</div>
-                    <div className="space-y-1 max-h-24 overflow-y-auto">
-                      {Object.entries(floorCounts).map(([floor, count]) => (
-                        <div key={floor} className="flex justify-between items-center text-sm">
+                  <div className="space-y-3">
+                    <div className="font-medium text-white">Floor Distribution</div>
+                    <div className="space-y-2 max-h-32 overflow-y-auto">
+                      {Object.entries(floorCounts)
+                        .sort(([a], [b]) => Number(b) - Number(a))
+                        .map(([floor, count]) => (
+                        <div key={floor} className="flex justify-between items-center text-sm bg-white/10 p-2 rounded">
                           <span className="text-white/80">Floor {floor}</span>
-                          <Badge variant="secondary" className="bg-white/20 text-white">{count}</Badge>
+                          <Badge variant="secondary" className="bg-white/20 text-white">{count} windows</Badge>
                         </div>
                       ))}
                     </div>
                   </div>
 
-                  <div className="space-y-2 mt-3">
-                    <div className="font-medium text-white">Window Types</div>
+                  <div className="space-y-2">
+                    <div className="font-medium text-white">Window Types Detected</div>
                     <div className="flex flex-wrap gap-1">
                       {Array.from(new Set(windows.map(w => w.window_type))).map(type => (
                         <Badge key={type} variant="outline" className="text-xs bg-white/10 border-white/30 text-white">
@@ -748,21 +774,78 @@ const MapViewer = () => {
                   </div>
                 </div>
               )}
+
+              {/* Building Search */}
+              <div className="space-y-3">
+                <h4 className="font-semibold text-white">Available Buildings</h4>
+                <Input
+                  placeholder="Search buildings..."
+                  value={buildingSearchTerm}
+                  onChange={(e) => setBuildingSearchTerm(e.target.value)}
+                  className="bg-white/20 border-white/30 text-white placeholder-white/70 focus-visible:ring-white/50"
+                />
+                
+                <div className="space-y-2 max-h-40 overflow-y-auto">
+                  {filteredBuildings.slice(0, 5).map((building) => (
+                    <div
+                      key={building.id}
+                      className={`p-3 rounded border cursor-pointer transition-colors ${
+                        selectedBuilding?.id === building.id
+                          ? 'bg-blue-500/30 border-blue-400'
+                          : 'hover:bg-white/20 border-white/30'
+                      }`}
+                      onClick={() => handleBuildingClick(building)}
+                    >
+                      <div className="font-medium text-sm text-white">{building.name}</div>
+                      {building.address && (
+                        <div className="text-xs text-white/70 flex items-center gap-1 mt-1">
+                          <MapPin className="w-3 h-3" />
+                          {building.address}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Building History */}
+              {buildingHistory.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-5 h-5 text-purple-400" />
+                    <h4 className="font-semibold text-white">Recent Analysis</h4>
+                  </div>
+                  
+                  <div className="space-y-2 max-h-32 overflow-y-auto">
+                    {buildingHistory.map((building, index) => (
+                      <div
+                        key={`${building.id}-${index}`}
+                        className="p-2 rounded border border-white/20 cursor-pointer hover:bg-white/10 transition-colors"
+                        onClick={() => handleBuildingClick(building)}
+                      >
+                        <div className="font-medium text-xs text-white">{building.name}</div>
+                        <div className="text-xs text-white/60 mt-1">
+                          {building.address || `${building.latitude.toFixed(4)}, ${building.longitude.toFixed(4)}`}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </Card>
         )}
 
-        {/* Location Info */}
-        <Card className="absolute bottom-6 left-6 p-3 bg-white/10 backdrop-blur-md border border-white/20">
-          <div className="flex items-center gap-2">
-            <Navigation className="w-4 h-4 text-white" />
-            <span className="text-sm font-medium text-white">Current Location:</span>
+        {/* Instructions */}
+        <div className="absolute bottom-6 right-6 z-10">
+          <div className="text-xs text-white/80 bg-black/40 backdrop-blur-sm p-3 rounded-lg max-w-xs">
+            <div className="space-y-1">
+              <div>Hold <span className="font-semibold text-white">Ctrl</span> + drag to rotate 3D view</div>
+              <div>Click buildings to analyze windows</div>
+              <div>Press <span className="font-semibold text-white">ESC</span> to exit Street View</div>
+            </div>
           </div>
-          <p className="text-sm text-white/80 mt-1">{currentLocation}</p>
-          <div className="text-xs text-white/60 mt-1">
-            Hold Ctrl + drag to rotate • Click buildings to analyze • Press ESC to exit Street View
-          </div>
-        </Card>
+        </div>
       </div>
     </div>
   );
