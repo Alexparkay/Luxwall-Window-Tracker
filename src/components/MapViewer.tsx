@@ -11,17 +11,29 @@ import {
   Building,
   Navigation,
   Map,
-  Eye
+  Eye,
+  X
 } from 'lucide-react';
 import BuildingControls from './BuildingControls';
 import WindowDisplay from './WindowDisplay';
 import { Building as BuildingType, useBuildingData } from '@/hooks/useBuildingData';
 
+// Generate proper UUID v4
+const generateUUID = () => {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+};
+
 const MapViewer = () => {
   const mapRef = useRef<HTMLDivElement>(null);
   const streetViewRef = useRef<HTMLDivElement>(null);
+  const autocompleteRef = useRef<HTMLInputElement>(null);
   const [map, setMap] = useState<any>(null);
   const [streetView, setStreetView] = useState<any>(null);
+  const [autocomplete, setAutocomplete] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [currentLocation, setCurrentLocation] = useState('New York, NY');
@@ -33,7 +45,7 @@ const MapViewer = () => {
   const [showStreetView, setShowStreetView] = useState(false);
   const [currentZoom, setCurrentZoom] = useState(18);
   
-  const { buildings, windows, selectedBuilding, setSelectedBuilding, fetchWindows, startWindowDetection } = useBuildingData();
+  const { buildings, windows, selectedBuilding, setSelectedBuilding, fetchWindows, startWindowDetection, saveBuilding } = useBuildingData();
 
   useEffect(() => {
     // Set up the global callback for Google Maps
@@ -45,13 +57,12 @@ const MapViewer = () => {
     }
   }, []);
 
-  // Handle keyboard events for Ctrl key and rotation
+  // Handle keyboard events for Ctrl key and Street View escape
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Control' && !ctrlPressed) {
         setCtrlPressed(true);
         if (map) {
-          // Enable rotation and tilting with Ctrl key
           map.setOptions({ 
             gestureHandling: 'greedy',
             rotateControl: true,
@@ -59,6 +70,11 @@ const MapViewer = () => {
           });
           console.log('Rotation mode enabled - Hold Ctrl and drag to rotate/tilt');
         }
+      }
+      
+      // Escape Street View with ESC key
+      if (e.key === 'Escape' && showStreetView) {
+        disableStreetView();
       }
     };
 
@@ -76,23 +92,14 @@ const MapViewer = () => {
       }
     };
 
-    const handleMouseDown = (e: MouseEvent) => {
-      if (ctrlPressed && map) {
-        // Enable rotation on mouse down while Ctrl is pressed
-        map.setOptions({ draggable: true, scrollwheel: true });
-      }
-    };
-
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
-    window.addEventListener('mousedown', handleMouseDown);
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
-      window.removeEventListener('mousedown', handleMouseDown);
     };
-  }, [map, ctrlPressed]);
+  }, [map, ctrlPressed, showStreetView]);
 
   // Update building markers when buildings change
   useEffect(() => {
@@ -115,12 +122,12 @@ const MapViewer = () => {
 
     // Create map with 3D buildings enabled
     const mapInstance = new window.google.maps.Map(mapRef.current, {
-      center: { lat: 40.7614, lng: -73.9776 }, // New York City
+      center: { lat: 40.7614, lng: -73.9776 },
       zoom: 18,
       mapTypeId: mapType,
-      tilt: 45, // Enable 3D view
+      tilt: 45,
       heading: 0,
-      mapId: 'DEMO_MAP_ID', // Required for 3D buildings
+      mapId: 'DEMO_MAP_ID',
       disableDefaultUI: false,
       zoomControl: true,
       mapTypeControl: true,
@@ -146,12 +153,32 @@ const MapViewer = () => {
       setStreetView(streetViewInstance);
     }
 
-    // Add zoom change listener to automatically show Street View
+    // Initialize Google Places Autocomplete
+    if (autocompleteRef.current) {
+      const autocompleteInstance = new window.google.maps.places.Autocomplete(autocompleteRef.current, {
+        types: ['establishment', 'geocode'],
+        fields: ['place_id', 'geometry', 'name', 'formatted_address']
+      });
+
+      autocompleteInstance.addListener('place_changed', () => {
+        const place = autocompleteInstance.getPlace();
+        if (place.geometry && place.geometry.location) {
+          mapInstance.setCenter(place.geometry.location);
+          mapInstance.setZoom(19);
+          setCurrentLocation(place.formatted_address || place.name || '');
+          setSearchQuery('');
+          console.log('Location selected from autocomplete:', place.name);
+        }
+      });
+
+      setAutocomplete(autocompleteInstance);
+    }
+
+    // Add zoom change listener
     mapInstance.addListener('zoom_changed', () => {
       const zoom = mapInstance.getZoom();
       setCurrentZoom(zoom);
       
-      // Auto-enable Street View when zoomed in very close
       if (zoom >= 21 && !showStreetView) {
         enableStreetView();
       } else if (zoom < 20 && showStreetView) {
@@ -163,15 +190,13 @@ const MapViewer = () => {
     mapInstance.addListener('click', async (event: any) => {
       const clickedLocation = event.latLng;
       console.log('Map clicked at:', clickedLocation.lat(), clickedLocation.lng());
-      
-      // Find nearest building or create a mock building for demo
       await handleMapClick(clickedLocation);
     });
 
     setMap(mapInstance);
     setIsLoading(false);
 
-    console.log('Map initialized successfully with 3D buildings and Street View');
+    console.log('Map initialized successfully with autocomplete and Street View');
   };
 
   const handleMapClick = async (location: any) => {
@@ -183,34 +208,37 @@ const MapViewer = () => {
       const distance = Math.sqrt(
         Math.pow(building.latitude - lat, 2) + Math.pow(building.longitude - lng, 2)
       );
-      return distance < 0.001; // Very close threshold
+      return distance < 0.001;
     });
 
     if (nearbyBuilding) {
       await handleBuildingClick(nearbyBuilding);
     } else {
-      // Create a temporary building for demonstration
-      const tempBuilding: BuildingType = {
-        id: `temp-${Date.now()}`,
-        name: 'Selected Building',
-        address: `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
-        latitude: lat,
-        longitude: lng,
-        google_place_id: null,
-        geometry: null
-      };
-      
-      await handleBuildingClick(tempBuilding);
+      // Create and save a new building with proper UUID
+      try {
+        const newBuilding = await saveBuilding({
+          name: 'Selected Building',
+          address: `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
+          latitude: lat,
+          longitude: lng,
+          google_place_id: null,
+          geometry: null
+        });
+        
+        if (newBuilding) {
+          await handleBuildingClick(newBuilding);
+        }
+      } catch (error) {
+        console.error('Error saving new building:', error);
+      }
     }
   };
 
   const handleBuildingClick = async (building: BuildingType) => {
     console.log('Building selected:', building.name);
     
-    // Set as selected building
     setSelectedBuilding(building);
     
-    // Center map on building and add visual highlight
     if (map) {
       map.setCenter({ lat: building.latitude, lng: building.longitude });
       map.setZoom(20);
@@ -226,7 +254,7 @@ const MapViewer = () => {
         fillOpacity: 0.2,
         map: map,
         center: { lat: building.latitude, lng: building.longitude },
-        radius: 50 // 50 meter radius
+        radius: 50
       });
     }
     
@@ -234,7 +262,7 @@ const MapViewer = () => {
     await fetchWindows(building.id);
     
     // Start window detection automatically
-    startWindowDetection(building.id);
+    await startWindowDetection(building.id);
     
     // Show windows
     setShowWindows(true);
@@ -261,7 +289,6 @@ const MapViewer = () => {
   const updateBuildingMarkers = () => {
     if (!window.google?.maps) return;
     
-    // Clear existing building markers
     buildingMarkers.forEach(marker => marker.setMap(null));
     
     const newMarkers = buildings.map(building => {
@@ -282,7 +309,6 @@ const MapViewer = () => {
         }
       });
 
-      // Add info window
       const infoWindow = new window.google.maps.InfoWindow({
         content: `
           <div>
@@ -307,7 +333,6 @@ const MapViewer = () => {
   const updateWindowMarkers = () => {
     if (!window.google?.maps) return;
     
-    // Clear existing window markers
     windowMarkers.forEach(marker => marker.setMap(null));
     
     if (!showWindows || !selectedBuilding || windows.length === 0) {
@@ -316,9 +341,8 @@ const MapViewer = () => {
     }
 
     const newWindowMarkers = windows.map(windowData => {
-      // Calculate position relative to building (this is simplified for demo)
-      const offsetLat = (windowData.y_coordinate - 50) * 0.00001; // Convert to lat offset
-      const offsetLng = (windowData.x_coordinate - 50) * 0.00001; // Convert to lng offset
+      const offsetLat = (windowData.y_coordinate - 50) * 0.00001;
+      const offsetLng = (windowData.x_coordinate - 50) * 0.00001;
       
       const marker = new window.google.maps.Marker({
         position: { 
@@ -340,7 +364,6 @@ const MapViewer = () => {
         }
       });
 
-      // Add info window for windows
       const infoWindow = new window.google.maps.InfoWindow({
         content: `
           <div>
@@ -382,11 +405,10 @@ const MapViewer = () => {
         
         map.setCenter(location);
         map.setZoom(18);
-        map.setTilt(45); // Ensure 3D view
+        map.setTilt(45);
         
         setCurrentLocation(response.results[0].formatted_address);
         
-        // Add a marker
         new window.google.maps.Marker({
           position: location,
           map: map,
@@ -446,6 +468,7 @@ const MapViewer = () => {
           
           <div className="flex-1 flex items-center gap-2">
             <Input
+              ref={autocompleteRef}
               placeholder="Search for a location..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -468,6 +491,19 @@ const MapViewer = () => {
           ref={streetViewRef} 
           className={`absolute inset-0 ${showStreetView ? 'block' : 'hidden'}`}
         />
+        
+        {/* Street View Exit Button */}
+        {showStreetView && (
+          <Button
+            onClick={disableStreetView}
+            className="absolute top-4 left-4 z-20"
+            variant="outline"
+            size="sm"
+          >
+            <X className="w-4 h-4 mr-2" />
+            Exit Street View
+          </Button>
+        )}
         
         {isLoading && (
           <div className="absolute inset-0 bg-gray-200 flex items-center justify-center">
@@ -536,7 +572,6 @@ const MapViewer = () => {
               </div>
             </div>
 
-            {/* Street View Toggle */}
             <div>
               <Button 
                 size="sm" 
@@ -571,7 +606,7 @@ const MapViewer = () => {
           </div>
           <p className="text-sm text-gray-600 mt-1">{currentLocation}</p>
           <div className="text-xs text-gray-500 mt-1">
-            Hold Ctrl + drag to rotate • Click anywhere to select building • Zoom to 21+ for Street View
+            Hold Ctrl + drag to rotate • Click anywhere to select building • Press ESC to exit Street View
           </div>
         </Card>
       </div>

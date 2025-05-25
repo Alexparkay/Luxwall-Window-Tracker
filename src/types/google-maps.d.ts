@@ -12,6 +12,10 @@ declare global {
         Size: any;
         Point: any;
         LatLng: any;
+        places: {
+          Autocomplete: any;
+          PlacesService: any;
+        };
         event: {
           addListener: (instance: any, eventName: string, handler: () => void) => void;
         };
