@@ -116,7 +116,10 @@ const MapViewer = () => {
   }, [map, windows, showWindows, selectedBuilding]);
 
   const initializeMap = () => {
-    if (!mapRef.current || !window.google?.maps) return;
+    if (!mapRef.current || !window.google?.maps) {
+      console.log('Google Maps not ready yet, retrying...');
+      return;
+    }
 
     console.log('Initializing Google Maps with 3D buildings and Street View...');
 
@@ -153,8 +156,8 @@ const MapViewer = () => {
       setStreetView(streetViewInstance);
     }
 
-    // Initialize Google Places Autocomplete
-    if (autocompleteRef.current) {
+    // Initialize Google Places Autocomplete - with safety check
+    if (autocompleteRef.current && window.google?.maps?.places?.Autocomplete) {
       const autocompleteInstance = new window.google.maps.places.Autocomplete(autocompleteRef.current, {
         types: ['establishment', 'geocode'],
         fields: ['place_id', 'geometry', 'name', 'formatted_address']
@@ -172,6 +175,8 @@ const MapViewer = () => {
       });
 
       setAutocomplete(autocompleteInstance);
+    } else {
+      console.warn('Google Places API not available - autocomplete disabled');
     }
 
     // Add zoom change listener
