@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,11 +13,15 @@ import {
   Navigation,
   Map,
   Eye,
-  X
+  X,
+  Settings,
+  Play,
+  Loader2,
+  Grid3X3,
+  MapPin
 } from 'lucide-react';
-import BuildingControls from './BuildingControls';
-import WindowDisplay from './WindowDisplay';
-import { Building as BuildingType, useBuildingData } from '@/hooks/useBuildingData';
+import { Badge } from '@/components/ui/badge';
+import { Building as BuildingType, Window, useBuildingData } from '@/hooks/useBuildingData';
 
 // Generate proper UUID v4
 const generateUUID = () => {
@@ -44,8 +49,11 @@ const MapViewer = () => {
   const [ctrlPressed, setCtrlPressed] = useState(false);
   const [showStreetView, setShowStreetView] = useState(false);
   const [currentZoom, setCurrentZoom] = useState(18);
+  const [showMapControls, setShowMapControls] = useState(false);
+  const [showAnalysisWidget, setShowAnalysisWidget] = useState(false);
+  const [buildingSearchTerm, setBuildingSearchTerm] = useState('');
   
-  const { buildings, windows, selectedBuilding, setSelectedBuilding, fetchWindows, startWindowDetection, saveBuilding } = useBuildingData();
+  const { buildings, windows, selectedBuilding, setSelectedBuilding, fetchWindows, startWindowDetection, saveBuilding, isLoading: buildingLoading } = useBuildingData();
 
   useEffect(() => {
     // Set up the global callback for Google Maps
@@ -66,7 +74,9 @@ const MapViewer = () => {
           map.setOptions({ 
             gestureHandling: 'greedy',
             rotateControl: true,
-            tiltControl: true
+            tiltControl: true,
+            draggable: true,
+            scrollwheel: true
           });
           console.log('Rotation mode enabled - Hold Ctrl and drag to rotate/tilt');
         }
@@ -85,7 +95,9 @@ const MapViewer = () => {
           map.setOptions({ 
             gestureHandling: 'cooperative',
             rotateControl: true,
-            tiltControl: true
+            tiltControl: true,
+            draggable: true,
+            scrollwheel: true
           });
           console.log('Rotation mode disabled');
         }
@@ -123,7 +135,7 @@ const MapViewer = () => {
 
     console.log('Initializing Google Maps with 3D buildings and Street View...');
 
-    // Create map with 3D buildings enabled
+    // Create map with 3D buildings enabled and proper rotation controls
     const mapInstance = new window.google.maps.Map(mapRef.current, {
       center: { lat: 40.7614, lng: -73.9776 },
       zoom: 18,
@@ -131,14 +143,14 @@ const MapViewer = () => {
       tilt: 45,
       heading: 0,
       mapId: 'DEMO_MAP_ID',
-      disableDefaultUI: false,
-      zoomControl: true,
-      mapTypeControl: true,
-      scaleControl: true,
-      streetViewControl: true,
+      disableDefaultUI: true,
+      zoomControl: false,
+      mapTypeControl: false,
+      scaleControl: false,
+      streetViewControl: false,
       rotateControl: true,
       tiltControl: true,
-      fullscreenControl: true,
+      fullscreenControl: false,
       gestureHandling: 'cooperative',
       draggable: true,
       scrollwheel: true
@@ -243,6 +255,7 @@ const MapViewer = () => {
     console.log('Building selected:', building.name);
     
     setSelectedBuilding(building);
+    setShowAnalysisWidget(true);
     
     if (map) {
       map.setCenter({ lat: building.latitude, lng: building.longitude });
@@ -391,10 +404,6 @@ const MapViewer = () => {
     setWindowMarkers(newWindowMarkers);
   };
 
-  const handleBuildingSelect = (building: BuildingType) => {
-    handleBuildingClick(building);
-  };
-
   const searchLocation = async () => {
     if (!map || !searchQuery.trim() || !window.google?.maps) return;
 
@@ -461,32 +470,26 @@ const MapViewer = () => {
     }
   };
 
-  return (
-    <div className="h-screen w-full flex flex-col bg-gray-100">
-      {/* Header */}
-      <div className="bg-white shadow-md p-4 z-10">
-        <div className="flex items-center gap-4 max-w-6xl mx-auto">
-          <div className="flex items-center gap-2">
-            <Building className="w-6 h-6 text-blue-600" />
-            <h1 className="text-xl font-bold text-gray-800">Window Detection Viewer</h1>
-          </div>
-          
-          <div className="flex-1 flex items-center gap-2">
-            <Input
-              ref={autocompleteRef}
-              placeholder="Search for a location..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && searchLocation()}
-              className="flex-1"
-            />
-            <Button onClick={searchLocation} size="sm">
-              <Search className="w-4 h-4" />
-            </Button>
-          </div>
-        </div>
-      </div>
+  const handleDetectWindows = () => {
+    if (selectedBuilding) {
+      startWindowDetection(selectedBuilding.id);
+    }
+  };
 
+  const filteredBuildings = buildings.filter(building =>
+    building.name.toLowerCase().includes(buildingSearchTerm.toLowerCase()) ||
+    (building.address && building.address.toLowerCase().includes(buildingSearchTerm.toLowerCase()))
+  );
+
+  const avgConfidence = windows.length > 0 ? windows.reduce((sum, w) => sum + (w.confidence || 0), 0) / windows.length : 0;
+  const floorCounts = windows.reduce((acc, w) => {
+    const floor = w.floor_number || 0;
+    acc[floor] = (acc[floor] || 0) + 1;
+    return acc;
+  }, {} as Record<number, number>);
+
+  return (
+    <div className="h-screen w-full flex flex-col">
       {/* Map Container */}
       <div className="flex-1 relative">
         <div ref={mapRef} className="w-full h-full" />
@@ -519,99 +522,245 @@ const MapViewer = () => {
           </div>
         )}
 
-        {/* Building Controls */}
-        <BuildingControls 
-          onBuildingSelect={handleBuildingSelect}
-          onShowWindows={setShowWindows}
-          showWindows={showWindows}
-        />
-
-        {/* Window Display */}
-        <WindowDisplay windows={windows} visible={showWindows} />
-
-        {/* Control Panel */}
-        <Card className="absolute top-4 right-4 p-4 bg-white/95 backdrop-blur">
-          <div className="space-y-3">
-            <div>
-              <p className="text-sm font-medium text-gray-700 mb-2">Map Controls</p>
-              <div className="flex gap-2">
-                <Button size="sm" variant="outline" onClick={zoomIn}>
-                  <ZoomIn className="w-4 h-4" />
-                </Button>
-                <Button size="sm" variant="outline" onClick={zoomOut}>
-                  <ZoomOut className="w-4 h-4" />
-                </Button>
-                <Button size="sm" variant="outline" onClick={toggle3D}>
-                  <Move3D className="w-4 h-4" />
-                </Button>
-                <Button size="sm" variant="outline" onClick={resetView}>
-                  <RotateCcw className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-            
-            <div>
-              <p className="text-sm font-medium text-gray-700 mb-2">Map Type</p>
-              <div className="flex gap-1">
-                <Button 
-                  size="sm" 
-                  variant={mapType === 'satellite' ? 'default' : 'outline'}
-                  onClick={() => handleMapTypeChange('satellite')}
-                >
-                  Satellite
-                </Button>
-                <Button 
-                  size="sm" 
-                  variant={mapType === 'roadmap' ? 'default' : 'outline'}
-                  onClick={() => handleMapTypeChange('roadmap')}
-                >
-                  Road
-                </Button>
-                <Button 
-                  size="sm" 
-                  variant={mapType === 'hybrid' ? 'default' : 'outline'}
-                  onClick={() => handleMapTypeChange('hybrid')}
-                >
-                  Hybrid
-                </Button>
-              </div>
-            </div>
-
-            <div>
-              <Button 
-                size="sm" 
-                variant={showStreetView ? 'default' : 'outline'}
-                onClick={() => showStreetView ? disableStreetView() : enableStreetView()}
-                className="w-full"
-              >
-                <Eye className="w-4 h-4 mr-2" />
-                Street View
-              </Button>
-            </div>
-
-            {ctrlPressed && (
-              <div className="text-xs text-blue-600 bg-blue-50 p-2 rounded">
-                Rotation mode active - Drag to rotate/tilt
-              </div>
-            )}
-
-            {currentZoom >= 20 && (
-              <div className="text-xs text-green-600 bg-green-50 p-2 rounded">
-                High zoom - Street View available
-              </div>
-            )}
+        {/* Streamlined Search Bar */}
+        <div className="absolute top-6 left-1/2 transform -translate-x-1/2 z-10">
+          <div className="flex items-center gap-2 bg-white/20 backdrop-blur-md border border-white/30 rounded-full px-4 py-3 shadow-lg">
+            <Input
+              ref={autocompleteRef}
+              placeholder="Search locations..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && searchLocation()}
+              className="bg-transparent border-none text-white placeholder-white/70 focus-visible:ring-0 w-80"
+            />
+            <Button onClick={searchLocation} size="sm" className="rounded-full bg-white/20 hover:bg-white/30">
+              <Search className="w-4 h-4" />
+            </Button>
           </div>
-        </Card>
+        </div>
+
+        {/* Map Controls Toggle */}
+        <Button
+          onClick={() => setShowMapControls(!showMapControls)}
+          className="absolute top-6 right-6 z-10 rounded-full bg-white/20 backdrop-blur-md border border-white/30 hover:bg-white/30"
+          size="sm"
+        >
+          <Settings className="w-4 h-4" />
+        </Button>
+
+        {/* Map Controls Popup */}
+        {showMapControls && (
+          <Card className="absolute top-20 right-6 p-4 bg-white/10 backdrop-blur-md border border-white/20 z-10">
+            <div className="space-y-3">
+              <div>
+                <p className="text-sm font-medium text-white mb-2">Map Controls</p>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={zoomIn} className="bg-white/20 border-white/30 text-white hover:bg-white/30">
+                    <ZoomIn className="w-4 h-4" />
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={zoomOut} className="bg-white/20 border-white/30 text-white hover:bg-white/30">
+                    <ZoomOut className="w-4 h-4" />
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={toggle3D} className="bg-white/20 border-white/30 text-white hover:bg-white/30">
+                    <Move3D className="w-4 h-4" />
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={resetView} className="bg-white/20 border-white/30 text-white hover:bg-white/30">
+                    <RotateCcw className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+              
+              <div>
+                <p className="text-sm font-medium text-white mb-2">Map Type</p>
+                <div className="flex gap-1">
+                  <Button 
+                    size="sm" 
+                    variant={mapType === 'satellite' ? 'default' : 'outline'}
+                    onClick={() => handleMapTypeChange('satellite')}
+                    className={mapType === 'satellite' ? 'bg-blue-600 text-white' : 'bg-white/20 border-white/30 text-white hover:bg-white/30'}
+                  >
+                    Satellite
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    variant={mapType === 'roadmap' ? 'default' : 'outline'}
+                    onClick={() => handleMapTypeChange('roadmap')}
+                    className={mapType === 'roadmap' ? 'bg-blue-600 text-white' : 'bg-white/20 border-white/30 text-white hover:bg-white/30'}
+                  >
+                    Road
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    variant={mapType === 'hybrid' ? 'default' : 'outline'}
+                    onClick={() => handleMapTypeChange('hybrid')}
+                    className={mapType === 'hybrid' ? 'bg-blue-600 text-white' : 'bg-white/20 border-white/30 text-white hover:bg-white/30'}
+                  >
+                    Hybrid
+                  </Button>
+                </div>
+              </div>
+
+              <div>
+                <Button 
+                  size="sm" 
+                  variant={showStreetView ? 'default' : 'outline'}
+                  onClick={() => showStreetView ? disableStreetView() : enableStreetView()}
+                  className={showStreetView ? 'bg-blue-600 text-white w-full' : 'bg-white/20 border-white/30 text-white hover:bg-white/30 w-full'}
+                >
+                  <Eye className="w-4 h-4 mr-2" />
+                  Street View
+                </Button>
+              </div>
+
+              {ctrlPressed && (
+                <div className="text-xs text-blue-200 bg-blue-500/20 p-2 rounded">
+                  Rotation mode active - Drag to rotate/tilt
+                </div>
+              )}
+            </div>
+          </Card>
+        )}
+
+        {/* Combined Building Controls & Window Analysis Widget */}
+        {showAnalysisWidget && (
+          <Card className="absolute bottom-6 right-6 p-6 bg-white/10 backdrop-blur-md border border-white/20 max-w-md z-10 shadow-2xl">
+            <div className="space-y-4">
+              {/* Building Controls Section */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <Building className="w-5 h-5 text-white" />
+                  <h3 className="font-semibold text-white">Building Analysis</h3>
+                  <Button
+                    onClick={() => setShowAnalysisWidget(false)}
+                    size="sm"
+                    variant="ghost"
+                    className="ml-auto text-white hover:bg-white/20"
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+
+                {/* Building Search */}
+                <div className="mb-3">
+                  <Input
+                    placeholder="Search buildings..."
+                    value={buildingSearchTerm}
+                    onChange={(e) => setBuildingSearchTerm(e.target.value)}
+                    className="bg-white/20 border-white/30 text-white placeholder-white/70 focus-visible:ring-white/50"
+                  />
+                </div>
+
+                {/* Building List */}
+                <div className="space-y-2 max-h-32 overflow-y-auto mb-3">
+                  {filteredBuildings.map((building) => (
+                    <div
+                      key={building.id}
+                      className={`p-2 rounded border cursor-pointer transition-colors ${
+                        selectedBuilding?.id === building.id
+                          ? 'bg-blue-500/30 border-blue-400'
+                          : 'hover:bg-white/20 border-white/30'
+                      }`}
+                      onClick={() => handleBuildingClick(building)}
+                    >
+                      <div className="font-medium text-sm text-white">{building.name}</div>
+                      {building.address && (
+                        <div className="text-xs text-white/70 flex items-center gap-1">
+                          <MapPin className="w-3 h-3" />
+                          {building.address}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Detection Controls */}
+                {selectedBuilding && (
+                  <div className="flex gap-2 mb-4">
+                    <Button
+                      onClick={handleDetectWindows}
+                      disabled={buildingLoading}
+                      size="sm"
+                      className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                    >
+                      {buildingLoading ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Play className="w-4 h-4" />
+                      )}
+                      Detect Windows
+                    </Button>
+                    
+                    <Button
+                      onClick={() => setShowWindows(!showWindows)}
+                      variant={showWindows ? "default" : "outline"}
+                      size="sm"
+                      className={showWindows ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-white/20 border-white/30 text-white hover:bg-white/30'}
+                    >
+                      <Eye className="w-4 h-4" />
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              {/* Window Analysis Section */}
+              {windows.length > 0 && showWindows && (
+                <div className="border-t border-white/20 pt-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Grid3X3 className="w-5 h-5 text-green-400" />
+                    <h4 className="font-semibold text-white">Window Analysis</h4>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 text-sm mb-3">
+                    <div className="bg-blue-500/20 p-3 rounded">
+                      <div className="font-medium text-blue-200">Total Windows</div>
+                      <div className="text-xl font-bold text-white">{windows.length}</div>
+                    </div>
+                    
+                    <div className="bg-green-500/20 p-3 rounded">
+                      <div className="font-medium text-green-200">Avg Confidence</div>
+                      <div className="text-xl font-bold text-white">
+                        {(avgConfidence * 100).toFixed(1)}%
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="font-medium text-white">Windows by Floor</div>
+                    <div className="space-y-1 max-h-24 overflow-y-auto">
+                      {Object.entries(floorCounts).map(([floor, count]) => (
+                        <div key={floor} className="flex justify-between items-center text-sm">
+                          <span className="text-white/80">Floor {floor}</span>
+                          <Badge variant="secondary" className="bg-white/20 text-white">{count}</Badge>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 mt-3">
+                    <div className="font-medium text-white">Window Types</div>
+                    <div className="flex flex-wrap gap-1">
+                      {Array.from(new Set(windows.map(w => w.window_type))).map(type => (
+                        <Badge key={type} variant="outline" className="text-xs bg-white/10 border-white/30 text-white">
+                          {type}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </Card>
+        )}
 
         {/* Location Info */}
-        <Card className="absolute bottom-4 left-4 p-3 bg-white/95 backdrop-blur">
+        <Card className="absolute bottom-6 left-6 p-3 bg-white/10 backdrop-blur-md border border-white/20">
           <div className="flex items-center gap-2">
-            <Navigation className="w-4 h-4 text-blue-600" />
-            <span className="text-sm font-medium text-gray-700">Current Location:</span>
+            <Navigation className="w-4 h-4 text-white" />
+            <span className="text-sm font-medium text-white">Current Location:</span>
           </div>
-          <p className="text-sm text-gray-600 mt-1">{currentLocation}</p>
-          <div className="text-xs text-gray-500 mt-1">
-            Hold Ctrl + drag to rotate • Click anywhere to select building • Press ESC to exit Street View
+          <p className="text-sm text-white/80 mt-1">{currentLocation}</p>
+          <div className="text-xs text-white/60 mt-1">
+            Hold Ctrl + drag to rotate • Click buildings to analyze • Press ESC to exit Street View
           </div>
         </Card>
       </div>
