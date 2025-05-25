@@ -7,6 +7,8 @@ declare global {
         Marker: any;
         InfoWindow: any;
         Geocoder: any;
+        StreetViewPanorama: any;
+        Circle: any;
         Size: any;
         Point: any;
         LatLng: any;
