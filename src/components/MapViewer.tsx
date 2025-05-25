@@ -1,5 +1,3 @@
-
-
 import React, { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,7 +10,8 @@ import {
   Move3D,
   Building,
   Navigation,
-  Map
+  Map,
+  Eye
 } from 'lucide-react';
 import BuildingControls from './BuildingControls';
 import WindowDisplay from './WindowDisplay';
@@ -20,7 +19,9 @@ import { Building as BuildingType, useBuildingData } from '@/hooks/useBuildingDa
 
 const MapViewer = () => {
   const mapRef = useRef<HTMLDivElement>(null);
+  const streetViewRef = useRef<HTMLDivElement>(null);
   const [map, setMap] = useState<any>(null);
+  const [streetView, setStreetView] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [currentLocation, setCurrentLocation] = useState('New York, NY');
@@ -29,6 +30,8 @@ const MapViewer = () => {
   const [buildingMarkers, setBuildingMarkers] = useState<any[]>([]);
   const [windowMarkers, setWindowMarkers] = useState<any[]>([]);
   const [ctrlPressed, setCtrlPressed] = useState(false);
+  const [showStreetView, setShowStreetView] = useState(false);
+  const [currentZoom, setCurrentZoom] = useState(18);
   
   const { buildings, windows, selectedBuilding, setSelectedBuilding, fetchWindows, startWindowDetection } = useBuildingData();
 
@@ -42,41 +45,61 @@ const MapViewer = () => {
     }
   }, []);
 
-  // Handle keyboard events for Ctrl key
+  // Handle keyboard events for Ctrl key and rotation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Control') {
+      if (e.key === 'Control' && !ctrlPressed) {
         setCtrlPressed(true);
         if (map) {
-          map.setOptions({ gestureHandling: 'greedy' });
+          // Enable rotation and tilting with Ctrl key
+          map.setOptions({ 
+            gestureHandling: 'greedy',
+            rotateControl: true,
+            tiltControl: true
+          });
+          console.log('Rotation mode enabled - Hold Ctrl and drag to rotate/tilt');
         }
       }
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.key === 'Control') {
+      if (e.key === 'Control' && ctrlPressed) {
         setCtrlPressed(false);
         if (map) {
-          map.setOptions({ gestureHandling: 'cooperative' });
+          map.setOptions({ 
+            gestureHandling: 'cooperative',
+            rotateControl: true,
+            tiltControl: true
+          });
+          console.log('Rotation mode disabled');
         }
+      }
+    };
+
+    const handleMouseDown = (e: MouseEvent) => {
+      if (ctrlPressed && map) {
+        // Enable rotation on mouse down while Ctrl is pressed
+        map.setOptions({ draggable: true, scrollwheel: true });
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('mousedown', handleMouseDown);
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('mousedown', handleMouseDown);
     };
-  }, [map]);
+  }, [map, ctrlPressed]);
 
   // Update building markers when buildings change
   useEffect(() => {
     if (map && buildings) {
       updateBuildingMarkers();
     }
-  }, [map, buildings]);
+  }, [map, buildings, selectedBuilding]);
 
   // Update window markers when windows change or visibility toggles
   useEffect(() => {
@@ -88,7 +111,7 @@ const MapViewer = () => {
   const initializeMap = () => {
     if (!mapRef.current || !window.google?.maps) return;
 
-    console.log('Initializing Google Maps with 3D buildings...');
+    console.log('Initializing Google Maps with 3D buildings and Street View...');
 
     // Create map with 3D buildings enabled
     const mapInstance = new window.google.maps.Map(mapRef.current, {
@@ -104,28 +127,107 @@ const MapViewer = () => {
       scaleControl: true,
       streetViewControl: true,
       rotateControl: true,
+      tiltControl: true,
       fullscreenControl: true,
-      gestureHandling: 'cooperative'
+      gestureHandling: 'cooperative',
+      draggable: true,
+      scrollwheel: true
+    });
+
+    // Initialize Street View
+    if (streetViewRef.current) {
+      const streetViewInstance = new window.google.maps.StreetViewPanorama(streetViewRef.current, {
+        position: { lat: 40.7614, lng: -73.9776 },
+        pov: { heading: 34, pitch: 10 },
+        visible: false
+      });
+      
+      mapInstance.setStreetView(streetViewInstance);
+      setStreetView(streetViewInstance);
+    }
+
+    // Add zoom change listener to automatically show Street View
+    mapInstance.addListener('zoom_changed', () => {
+      const zoom = mapInstance.getZoom();
+      setCurrentZoom(zoom);
+      
+      // Auto-enable Street View when zoomed in very close
+      if (zoom >= 21 && !showStreetView) {
+        enableStreetView();
+      } else if (zoom < 20 && showStreetView) {
+        disableStreetView();
+      }
+    });
+
+    // Add click listener for building selection
+    mapInstance.addListener('click', async (event: any) => {
+      const clickedLocation = event.latLng;
+      console.log('Map clicked at:', clickedLocation.lat(), clickedLocation.lng());
+      
+      // Find nearest building or create a mock building for demo
+      await handleMapClick(clickedLocation);
     });
 
     setMap(mapInstance);
     setIsLoading(false);
 
-    console.log('Map initialized successfully with 3D buildings');
+    console.log('Map initialized successfully with 3D buildings and Street View');
+  };
+
+  const handleMapClick = async (location: any) => {
+    const lat = location.lat();
+    const lng = location.lng();
+    
+    // Check if clicked near an existing building
+    const nearbyBuilding = buildings.find(building => {
+      const distance = Math.sqrt(
+        Math.pow(building.latitude - lat, 2) + Math.pow(building.longitude - lng, 2)
+      );
+      return distance < 0.001; // Very close threshold
+    });
+
+    if (nearbyBuilding) {
+      await handleBuildingClick(nearbyBuilding);
+    } else {
+      // Create a temporary building for demonstration
+      const tempBuilding: BuildingType = {
+        id: `temp-${Date.now()}`,
+        name: 'Selected Building',
+        address: `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
+        latitude: lat,
+        longitude: lng,
+        google_place_id: null,
+        geometry: null
+      };
+      
+      await handleBuildingClick(tempBuilding);
+    }
   };
 
   const handleBuildingClick = async (building: BuildingType) => {
-    console.log('Building clicked:', building.name);
+    console.log('Building selected:', building.name);
     
     // Set as selected building
     setSelectedBuilding(building);
     
-    // Center map on building
+    // Center map on building and add visual highlight
     if (map) {
       map.setCenter({ lat: building.latitude, lng: building.longitude });
       map.setZoom(20);
       map.setTilt(45);
       setCurrentLocation(building.address || building.name);
+      
+      // Add a highlight circle around the selected building
+      new window.google.maps.Circle({
+        strokeColor: '#dc2626',
+        strokeOpacity: 0.8,
+        strokeWeight: 3,
+        fillColor: '#dc2626',
+        fillOpacity: 0.2,
+        map: map,
+        center: { lat: building.latitude, lng: building.longitude },
+        radius: 50 // 50 meter radius
+      });
     }
     
     // Fetch existing windows first
@@ -136,6 +238,24 @@ const MapViewer = () => {
     
     // Show windows
     setShowWindows(true);
+  };
+
+  const enableStreetView = () => {
+    if (streetView && map) {
+      const center = map.getCenter();
+      streetView.setPosition(center);
+      streetView.setVisible(true);
+      setShowStreetView(true);
+      console.log('Street View enabled');
+    }
+  };
+
+  const disableStreetView = () => {
+    if (streetView) {
+      streetView.setVisible(false);
+      setShowStreetView(false);
+      console.log('Street View disabled');
+    }
   };
 
   const updateBuildingMarkers = () => {
@@ -168,7 +288,7 @@ const MapViewer = () => {
           <div>
             <h3 style="margin: 0 0 8px 0; color: #1f2937;">${building.name}</h3>
             ${building.address ? `<p style="margin: 0; color: #6b7280; font-size: 14px;">${building.address}</p>` : ''}
-            <p style="margin: 4px 0 0 0; color: #2563eb; font-size: 12px; cursor: pointer;">Click marker to analyze windows</p>
+            <p style="margin: 4px 0 0 0; color: #2563eb; font-size: 12px; cursor: pointer;">Click to analyze windows</p>
           </div>
         `
       });
@@ -343,6 +463,12 @@ const MapViewer = () => {
       <div className="flex-1 relative">
         <div ref={mapRef} className="w-full h-full" />
         
+        {/* Street View Container */}
+        <div 
+          ref={streetViewRef} 
+          className={`absolute inset-0 ${showStreetView ? 'block' : 'hidden'}`}
+        />
+        
         {isLoading && (
           <div className="absolute inset-0 bg-gray-200 flex items-center justify-center">
             <div className="text-center">
@@ -410,9 +536,28 @@ const MapViewer = () => {
               </div>
             </div>
 
+            {/* Street View Toggle */}
+            <div>
+              <Button 
+                size="sm" 
+                variant={showStreetView ? 'default' : 'outline'}
+                onClick={() => showStreetView ? disableStreetView() : enableStreetView()}
+                className="w-full"
+              >
+                <Eye className="w-4 h-4 mr-2" />
+                Street View
+              </Button>
+            </div>
+
             {ctrlPressed && (
               <div className="text-xs text-blue-600 bg-blue-50 p-2 rounded">
-                Rotation mode active - drag to rotate
+                Rotation mode active - Drag to rotate/tilt
+              </div>
+            )}
+
+            {currentZoom >= 20 && (
+              <div className="text-xs text-green-600 bg-green-50 p-2 rounded">
+                High zoom - Street View available
               </div>
             )}
           </div>
@@ -426,7 +571,7 @@ const MapViewer = () => {
           </div>
           <p className="text-sm text-gray-600 mt-1">{currentLocation}</p>
           <div className="text-xs text-gray-500 mt-1">
-            Hold Ctrl + drag to rotate • Click buildings to analyze windows
+            Hold Ctrl + drag to rotate • Click anywhere to select building • Zoom to 21+ for Street View
           </div>
         </Card>
       </div>
@@ -435,4 +580,3 @@ const MapViewer = () => {
 };
 
 export default MapViewer;
-
