@@ -58,10 +58,11 @@ const MapViewer = () => {
   const [analysisCircle, setAnalysisCircle] = useState<any>(null);
   const [ctrlPressed, setCtrlPressed] = useState(false);
   const [showStreetView, setShowStreetView] = useState(false);
-  const [currentZoom, setCurrentZoom] = useState(18);
+  const [currentZoom, setCurrentZoom] = useState(14);
   const [showMapControls, setShowMapControls] = useState(false);
   const [show3DControls, setShow3DControls] = useState(false);
-  const [showAnalysisWidget, setShowAnalysisWidget] = useState(false);
+  const [showAnalysisWidget, setShowAnalysisWidget] = useState(true); // Always show sidebar
+  const [sidebarState, setSidebarState] = useState<'collapsed' | 'half' | 'expanded'>('half'); // New sidebar state
   const [buildingSearchTerm, setBuildingSearchTerm] = useState('');
   const [buildingHistory, setBuildingHistory] = useState<BuildingType[]>([]);
   const [currentHeading, setCurrentHeading] = useState(0);
@@ -88,19 +89,11 @@ const MapViewer = () => {
     yearBuilt: 2008,
     floors: 17,
     status: 'built',
-    monthlyTemperatures: {
-      January: '0°C / -6°C',
-      February: '2°C / -5°C',
-      March: '7°C / -1°C',
-      April: '14°C / 5°C',
-      May: '21°C / 11°C',
-      June: '26°C / 17°C',
-      July: '28°C / 19°C',
-      August: '27°C / 18°C',
-      September: '23°C / 14°C',
-      October: '16°C / 8°C',
-      November: '9°C / 2°C',
-      December: '3°C / -3°C'
+    windowSizeDistribution: {
+      small: { size: '1.2 m × 1.0 m', count: 180, percentage: 30.0 },
+      standard: { size: '1.5 m × 1.2 m', count: 300, percentage: 50.0 },
+      large: { size: '1.8 m × 1.5 m', count: 90, percentage: 15.0 },
+      corner: { size: '2.0 m × 1.8 m', count: 30, percentage: 5.0 }
     },
     heatingDegreeDays: {
       January: '11°C',
@@ -164,19 +157,11 @@ const MapViewer = () => {
     yearBuilt: 1965,
     floors: 30,
     status: 'built',
-    monthlyTemperatures: {
-      January: '0°C / -6°C',
-      February: '2°C / -5°C',
-      March: '7°C / -1°C',
-      April: '14°C / 5°C',
-      May: '21°C / 11°C',
-      June: '27°C / 17°C',
-      July: '28°C / 19°C',
-      August: '27°C / 18°C',
-      September: '23°C / 14°C',
-      October: '16°C / 8°C',
-      November: '9°C / 2°C',
-      December: '3°C / -3°C'
+    windowSizeDistribution: {
+      small: { size: '1.2 m × 1.2 m', count: 370, percentage: 29.9 },
+      standard: { size: '1.5 m × 1.5 m', count: 618, percentage: 50.0 },
+      large: { size: '1.8 m × 1.8 m', count: 186, percentage: 15.1 },
+      corner: { size: '2.0 m × 2.0 m', count: 62, percentage: 5.0 }
     },
     heatingDegreeDays: {
       January: '11°C',
@@ -240,6 +225,12 @@ const MapViewer = () => {
     yearBuilt: 1954,
     floors: 14,
     status: 'built',
+    windowSizeDistribution: {
+      small: { size: '0.8 m × 1.0 m', count: 287, percentage: 29.6 },
+      standard: { size: '1.0 m × 1.2 m', count: 412, percentage: 42.6 },
+      large: { size: '1.2 m × 1.5 m', count: 201, percentage: 20.8 },
+      corner: { size: '1.5 m × 1.8 m', count: 68, percentage: 7.0 }
+    },
     monthlyTemperatures: {
       January: '0°C / -6°C',
       February: '2°C / -5°C',
@@ -451,7 +442,7 @@ const MapViewer = () => {
     // ENHANCED 3D CONFIGURATION for reliable 3D buildings
     const mapInstance = new window.google.maps.Map(mapRef.current, {
       center: { lat: 42.3295, lng: -83.0435 }, // Coleman A. Young Municipal Building coordinates (corrected)
-      zoom: 18, // Reduced zoom for better initial view
+      zoom: 14, // Much more zoomed out for better overview
       mapTypeId: 'roadmap', // Default to roadmap view (blocked 3D style)
       tilt: 67.5, // MAXIMUM tilt for best 3D view
       heading: 45, // Angled view to see building sides
@@ -547,8 +538,8 @@ const MapViewer = () => {
         const place = autocompleteInstance.getPlace();
         if (place.geometry && place.geometry.location) {
           mapInstance.setCenter(place.geometry.location);
-          mapInstance.setZoom(21);
-          mapInstance.setTilt(67.5);
+          mapInstance.setZoom(16); // Moderate zoom for searched locations
+          mapInstance.setTilt(45);
           setCurrentLocation(place.formatted_address || place.name || '');
           setSearchQuery('');
         }
@@ -667,6 +658,11 @@ const MapViewer = () => {
     setSelectedBuilding(building);
     setShowAnalysisWidget(true);
     
+    // Ensure sidebar is at least half open for building analysis
+    if (sidebarState === 'collapsed') {
+      setSidebarState('half');
+    }
+    
     // Add to building history if not already present
     setBuildingHistory(prev => {
       const exists = prev.find(b => b.id === building.id);
@@ -678,7 +674,7 @@ const MapViewer = () => {
     
     if (map) {
       map.setCenter({ lat: building.latitude, lng: building.longitude });
-      map.setZoom(20);
+      map.setZoom(17); // Moderate zoom for building view
       map.setTilt(45);
       setCurrentLocation(building.address || building.name);
       
@@ -860,13 +856,29 @@ const MapViewer = () => {
         zIndex: windowData.floor_number * 10 // Higher floors appear on top
       });
 
+      // Determine if window is north-facing (front) or south-facing (back) based on position
+      const buildingCenter = selectedBuilding.id === 'coleman-young-municipal' 
+        ? { lat: 42.3295, lng: -83.0435 }
+        : { lat: selectedBuilding.latitude, lng: selectedBuilding.longitude };
+      
+      const isNorthFacing = position.lat > buildingCenter.lat;
+      const imageFileName = isNorthFacing ? 'Back.png' : 'Front.png';
+      const facingDirection = isNorthFacing ? 'North (Back)' : 'South (Front)';
+
       const infoWindow = new window.google.maps.InfoWindow({
         content: `
-          <div style="min-width: 220px;">
+          <div style="width: 320px;">
             <h4 style="margin: 0 0 8px 0; color: #1f2937; font-weight: bold;">Window Analysis Point</h4>
             <div style="margin-bottom: 8px; padding: 4px 8px; background: #e5e7eb; border-radius: 4px; font-size: 10px; color: #374151;">
               📊 Estimated from satellite imagery and building plans
             </div>
+            
+            <!-- Window Image - Full Size -->
+            <div style="margin-bottom: 12px;">
+              <img src="/Images/${imageFileName}" alt="${facingDirection} View" style="width: 100%; height: 200px; object-fit: cover; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.2);" />
+              <div style="margin-top: 4px; text-align: center; font-size: 11px; color: #6b7280; font-weight: 500;">${facingDirection} View</div>
+            </div>
+            
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px;">
               <div>
                 <strong>Floor:</strong> ${windowData.floor_number}
@@ -882,6 +894,9 @@ const MapViewer = () => {
               </div>
               <div style="grid-column: 1 / -1;">
                 <strong>Est. Height:</strong> ~${(windowData.floor_height || windowData.floor_number * 3.5).toFixed(1)}m above ground
+              </div>
+              <div style="grid-column: 1 / -1;">
+                <strong>Orientation:</strong> ${facingDirection}
               </div>
             </div>
             <div style="margin-top: 8px; padding: 4px 8px; background: ${floorColor}; color: white; border-radius: 4px; text-align: center; font-size: 11px;">
@@ -919,7 +934,7 @@ const MapViewer = () => {
         const location = response.results[0].geometry.location;
         
         map.setCenter(location);
-        map.setZoom(18);
+        map.setZoom(16); // Moderate zoom for searched locations
         map.setTilt(45);
         
         setCurrentLocation(response.results[0].formatted_address);
@@ -966,10 +981,10 @@ const MapViewer = () => {
     if (map) {
       console.log('🔄 Resetting to 3D view...');
       
-      // Simplified reset focusing on what works - center on MGM Grand Detroit
+      // Simplified reset focusing on what works - center on Coleman A. Young Municipal Building
       map.setTilt(45);
       map.setHeading(0);
-      map.setZoom(21); // Higher zoom for 3D buildings
+      map.setZoom(16); // Moderate zoom for reset view
       map.setMapTypeId('roadmap'); // Default to roadmap view
       map.setCenter({ lat: 42.3295, lng: -83.0435 }); // Coleman A. Young Municipal Building coordinates (corrected)
       
@@ -1142,6 +1157,7 @@ const MapViewer = () => {
     // Set as selected building and show analysis
     setSelectedBuilding(colemanBuilding as any);
     setShowAnalysisWidget(true);
+    setSidebarState('half'); // Start with sidebar in half state
     setCurrentLocation(colemanYoungData.name);
     
     // Generate realistic window data for Coleman A. Young Municipal Building
@@ -1221,7 +1237,7 @@ const MapViewer = () => {
 
   return (
     <div className="h-screen w-full flex flex-col">
-      {/* Map Container - Ensure proper sizing */}
+      {/* Map Container - Full Size Always */}
       <div className="flex-1 relative">
         <div ref={mapRef} className="w-full h-full min-h-screen" style={{ minHeight: '100vh' }} />
         
@@ -1254,43 +1270,38 @@ const MapViewer = () => {
                 </div>
               )}
 
-        {/* Current Location Widget - Center */}
+        {/* Unified Search Bar - Center */}
         <div className="absolute top-6 left-1/2 transform -translate-x-1/2 z-10">
-          <Card className="p-3 bg-black/40 backdrop-blur-xl border border-white/10">
-            <div className="flex items-center gap-2">
-              <Navigation className="w-4 h-4 text-white" />
-              <div className="text-sm font-medium text-white">
-                {currentLocation}
-              </div>
-            </div>
-          </Card>
-        </div>
-
-        {/* Top Right Controls */}
-        <div className="absolute top-6 right-6 z-10 flex items-center gap-3">
-          {/* Search Bar with Coordinates */}
           <div className="bg-black/40 backdrop-blur-xl border border-white/10 rounded-full px-4 py-3 shadow-lg">
             <div className="flex items-center gap-2">
+              <Navigation className="w-4 h-4 text-white" />
               <Input
                 ref={autocompleteRef}
                 placeholder="Search locations..."
-                value={searchQuery}
+                value={searchQuery || currentLocation}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && searchLocation()}
-                className="bg-transparent border-none text-white placeholder-white/70 focus-visible:ring-0 w-64"
+                onFocus={() => {
+                  if (!searchQuery) {
+                    setSearchQuery('');
+                  }
+                }}
+                onBlur={() => {
+                  if (!searchQuery.trim()) {
+                    setSearchQuery('');
+                  }
+                }}
+                className="bg-transparent border-none text-white placeholder-white/70 focus-visible:ring-0 w-80 text-sm font-medium"
               />
               <Button onClick={searchLocation} size="sm" className="rounded-full bg-black/30 hover:bg-black/40">
                 <Search className="w-4 h-4" />
               </Button>
             </div>
-            <div className="text-xs text-white/70 mt-1 text-center">
-              {selectedBuilding ? 
-                `${selectedBuilding.latitude.toFixed(6)}, ${selectedBuilding.longitude.toFixed(6)}` :
-                `${getCurrentPropertyData().coordinates.lat.toFixed(6)}, ${getCurrentPropertyData().coordinates.lng.toFixed(6)}`
-              }
-            </div>
           </div>
+        </div>
 
+        {/* Top Right Controls - Simplified */}
+        <div className="absolute top-6 right-6 z-10 flex items-center gap-3">
           {/* 3D Navigation Controls Toggle */}
           <Button
             onClick={() => setShow3DControls(!show3DControls)}
@@ -1710,36 +1721,157 @@ const MapViewer = () => {
           </Card>
         )}
 
-        {/* Enhanced Building Analysis Widget - Left Side - MUCH LARGER */}
+        {/* Collapsible Building Analysis Sidebar */}
         {showAnalysisWidget && (
-          <Card className="absolute top-6 left-6 bottom-6 w-[800px] p-8 bg-black/40 backdrop-blur-xl border border-white/10 z-10 shadow-2xl overflow-y-auto">
-            <div className="space-y-8">
+          <div
+            className={`fixed top-0 left-0 h-screen bg-black/60 backdrop-blur-xl border-r border-white/10 z-10 shadow-2xl transition-all duration-500 ease-in-out overflow-hidden ${
+              sidebarState === 'collapsed' ? 'w-16' : 
+              sidebarState === 'half' ? 'w-80' : 
+              'w-[800px]'
+            }`}
+          >
+            {/* Sidebar Content */}
+            <div className="h-full overflow-y-auto custom-scrollbar relative">
+              {/* Sidebar Toggle Controls - Top Right Corner */}
+              {(sidebarState === 'half' || sidebarState === 'expanded') && (
+                <div className="absolute top-4 right-4 z-30 flex gap-2">
+                  <button
+                    onClick={() => setSidebarState(sidebarState === 'expanded' ? 'half' : 'expanded')}
+                    className="bg-white/15 backdrop-blur-xl border border-white/40 p-2 rounded-lg hover:bg-white/25 transition-all duration-300 group shadow-lg"
+                    title={sidebarState === 'expanded' ? 'Collapse to Half View' : 'Expand to Full View'}
+                  >
+                    {sidebarState === 'expanded' ? (
+                      <ChevronLeft className="w-4 h-4 text-white group-hover:scale-110" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4 text-white group-hover:scale-110" />
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setSidebarState('collapsed')}
+                    className="bg-white/15 backdrop-blur-xl border border-white/40 p-2 rounded-lg hover:bg-white/25 transition-all duration-300 group shadow-lg"
+                    title="Minimize to Icon Only"
+                  >
+                    <Compass className="w-4 h-4 text-white group-hover:scale-110" />
+                  </button>
+                </div>
+              )}
+
+              {/* Collapsed State Toggle - Center */}
+              {sidebarState === 'collapsed' && (
+                <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-30">
+                  <button
+                    onClick={() => setSidebarState('half')}
+                    className="bg-white/15 backdrop-blur-xl border border-white/40 p-2 rounded-lg hover:bg-white/25 transition-all duration-300 group shadow-lg"
+                    title="Show Analysis Panel"
+                  >
+                    <Building className="w-4 h-4 text-white group-hover:scale-110" />
+                  </button>
+                </div>
+              )}
+
+              {/* Collapsed State - Icon Only */}
+              {sidebarState === 'collapsed' && (
+                <div className="p-4 h-full flex flex-col items-center justify-center">
+                  <div className="text-center space-y-4">
+                    <Building className="w-8 h-8 text-white mx-auto" />
+                    <div className="writing-mode-vertical text-white font-semibold text-sm transform rotate-90 whitespace-nowrap">
+                      Building Analysis
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Half State - Compact Info */}
+              {sidebarState === 'half' && (
+                <div className="p-4 pt-16 space-y-4">
               {/* Header */}
-              <div className="flex items-center gap-3 mb-6">
-                <Building className="w-8 h-8 text-white" />
-                <h2 className="text-2xl font-bold text-white">Building Analysis Center</h2>
+                  <div className="flex items-center gap-2 mb-4">
+                    <Building className="w-6 h-6 text-white" />
+                    <h2 className="text-lg font-bold text-white">Analysis</h2>
+                  </div>
+
+                  {/* Quick Building Info */}
+                  <div className="bg-white/10 backdrop-blur-md p-4 rounded-lg border border-white/20 shadow-lg">
+                    <h3 className="text-sm font-semibold text-white mb-2">Current Building</h3>
+                    <div className="text-xs text-white/70 space-y-1">
+                      <div className="font-medium text-white">{getCurrentPropertyData().name}</div>
+                      <div>{getCurrentPropertyData().floors} floors • {getCurrentPropertyData().totalWindows} windows</div>
+                      <div className="text-green-400 font-medium">{getCurrentPropertyData().energyAnalysis.energySavings} energy savings</div>
+                    </div>
+                  </div>
+
+                  {/* Key Metrics */}
+                  <div className="grid grid-cols-1 gap-3">
+                    <div className="bg-blue-500/20 backdrop-blur-md p-3 rounded border border-blue-400/30 shadow-lg">
+                      <div className="text-blue-200 text-xs">Total Windows</div>
+                      <div className="text-white font-bold text-lg">{getCurrentPropertyData().totalWindows}</div>
+                    </div>
+                    <div className="bg-green-500/20 backdrop-blur-md p-3 rounded border border-green-400/30 shadow-lg">
+                      <div className="text-green-200 text-xs">Avg Size</div>
+                      <div className="text-white font-bold">{getCurrentPropertyData().averageWindowSize}</div>
+                    </div>
+                    <div className="bg-purple-500/20 backdrop-blur-md p-3 rounded border border-purple-400/30 shadow-lg">
+                      <div className="text-purple-200 text-xs">Wall Ratio</div>
+                      <div className="text-white font-bold">{(getCurrentPropertyData().windowWallRatio * 100).toFixed(1)}%</div>
+                    </div>
+                  </div>
+
+                  {/* Quick Actions */}
+                  <div className="space-y-2">
                 <Button
-                  onClick={() => setShowAnalysisWidget(false)}
-                  size="sm"
-                  variant="ghost"
-                  className="ml-auto text-white hover:bg-white/20"
-                >
-                  <X className="w-5 h-5" />
+                      onClick={() => setShowWindows(!showWindows)}
+                      className="w-full bg-blue-500/20 backdrop-blur-md border border-blue-400/30 hover:bg-blue-500/30 text-white py-2 text-sm shadow-lg"
+                    >
+                      <Eye className="w-4 h-4 mr-2" />
+                      {showWindows ? 'Hide' : 'Show'} Windows
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        if (map) {
+                          map.setCenter({ lat: getCurrentPropertyData().coordinates.lat, lng: getCurrentPropertyData().coordinates.lng });
+                          map.setZoom(17);
+                          map.setTilt(45);
+                        }
+                      }}
+                      variant="outline"
+                      className="w-full bg-white/10 backdrop-blur-md border border-white/30 text-white hover:bg-white/20 py-2 text-sm shadow-lg"
+                    >
+                      <Navigation className="w-4 h-4 mr-2" />
+                      Center View
                 </Button>
               </div>
 
+                  {/* Expand Hint */}
+                  <div className="text-center pt-4">
+                    <button
+                      onClick={() => setSidebarState('expanded')}
+                      className="text-xs text-white/50 hover:text-white/80 transition-colors duration-300"
+                    >
+                      → Expand for full analysis
+                    </button>
+                  </div>
+                </div>
+              )}
 
+              {/* Expanded State - Full Content */}
+              {sidebarState === 'expanded' && (
+                <div className="p-6 pt-16 space-y-6">
+                  {/* Header */}
+                  <div className="flex items-center gap-3 mb-6">
+                    <Building className="w-8 h-8 text-white" />
+                    <h2 className="text-2xl font-bold text-white">Building Analysis Center</h2>
+                  </div>
 
-              {/* Current Building Info - Selected Property */}
-              {(selectedBuilding?.id === 'mgm-grand-detroit' || selectedProperty) && (
-                <div className="space-y-8">
+                  {/* All the original content - same as before but reorganized */}
+                  {(selectedBuilding?.id === 'coleman-young-municipal' || selectedProperty) && (
+                    <div className="space-y-6">
                   {/* Building Overview */}
-                  <div className="bg-black/30 p-6 rounded-lg border border-white/10">
+                      <div className="bg-white/10 backdrop-blur-md p-6 rounded-lg border border-white/20 shadow-lg">
                     <div className="flex items-center gap-3 mb-4">
                       <Info className="w-6 h-6 text-blue-400" />
                       <h3 className="text-xl font-semibold text-white">Building Overview</h3>
                     </div>
-                    <div className="bg-blue-500/20 p-3 rounded border border-blue-400/30 mb-4">
+                        <div className="bg-blue-500/20 backdrop-blur-md p-3 rounded border border-blue-400/30 mb-4">
                       <p className="text-xs text-blue-200">
                         📊 Data compiled from public records, satellite imagery, and industry databases
                       </p>
@@ -1763,152 +1895,96 @@ const MapViewer = () => {
                         <div className="text-white font-medium">{availableProperties.find(p => p.id === selectedProperty)?.data.owner}</div>
                         <div className="text-white/70 mt-3 text-sm">Total Area</div>
                         <div className="text-white font-bold text-lg">{availableProperties.find(p => p.id === selectedProperty)?.data.totalArea}</div>
-                  </div>
-                </div>
-                  </div>
-
-                  {/* Energy & Cost Analysis */}
-                  <div className="bg-black/30 p-6 rounded-lg border border-white/10">
-                    <div className="flex items-center gap-3 mb-4">
-                      <Grid3X3 className="w-6 h-6 text-green-400" />
-                      <h3 className="text-xl font-semibold text-white">Energy & Cost Analysis</h3>
-                    </div>
-                    <div className="bg-green-500/20 p-3 rounded border border-green-400/30 mb-4">
-                      <p className="text-xs text-green-200">
-                        ⚡ Estimates based on utility data research and building performance studies
-                      </p>
-                    </div>
-                    <div className="grid grid-cols-2 gap-6">
-                <div className="space-y-4">
-                        <div className="bg-blue-500/30 p-4 rounded border border-blue-400/20">
-                          <div className="font-medium text-blue-200 text-sm">Annual Energy Consumption</div>
-                          <div className="text-2xl font-bold text-white">{availableProperties.find(p => p.id === selectedProperty)?.data.energyConsumption}</div>
-                        </div>
-                        <div className="bg-red-500/30 p-4 rounded border border-red-400/20">
-                          <div className="font-medium text-red-200 text-sm">Current Annual Cost</div>
-                          <div className="text-2xl font-bold text-white">{availableProperties.find(p => p.id === selectedProperty)?.data.energyAnalysis.currentAnnualCost}</div>
-                        </div>
-                        <div className="bg-purple-500/30 p-4 rounded border border-purple-400/20">
-                          <div className="font-medium text-purple-200 text-sm">Electricity Rate</div>
-                          <div className="text-xl font-bold text-white">{availableProperties.find(p => p.id === selectedProperty)?.data.electricityRate}</div>
-                        </div>
-                      </div>
-                      <div className="space-y-4">
-                        <div className="bg-green-500/30 p-4 rounded border border-green-400/20">
-                          <div className="font-medium text-green-200 text-sm">Projected Savings</div>
-                          <div className="text-2xl font-bold text-white">{getCurrentPropertyData().energyAnalysis.projectedSavings}</div>
-                        </div>
-                        <div className="bg-orange-500/30 p-4 rounded border border-orange-400/20">
-                          <div className="font-medium text-orange-200 text-sm">Implementation Cost</div>
-                          <div className="text-2xl font-bold text-white">{getCurrentPropertyData().energyAnalysis.implementationCost}</div>
-                        </div>
-                        <div className="bg-cyan-500/30 p-4 rounded border border-cyan-400/20">
-                          <div className="font-medium text-cyan-200 text-sm">Efficiency Gain</div>
-                          <div className="text-xl font-bold text-white">{getCurrentPropertyData().energyAnalysis.efficiencyGain}</div>
-                        </div>
                       </div>
                     </div>
                   </div>
 
                   {/* Window Analysis */}
-                  <div className="bg-black/30 p-6 rounded-lg border border-white/10">
+                      <div className="bg-white/10 backdrop-blur-md p-6 rounded-lg border border-white/20 shadow-lg">
                     <div className="flex items-center gap-3 mb-4">
                       <Eye className="w-6 h-6 text-cyan-400" />
                       <h3 className="text-xl font-semibold text-white">Window Analysis</h3>
                     </div>
-                    <div className="bg-cyan-500/20 p-3 rounded border border-cyan-400/30 mb-4">
+                        <div className="bg-cyan-500/20 backdrop-blur-md p-3 rounded border border-cyan-400/30 mb-4">
                       <p className="text-xs text-cyan-200">
                         🏢 Analysis from architectural plans and satellite imagery review
                       </p>
                     </div>
                     <div className="grid grid-cols-3 gap-4">
-                      <div className="bg-blue-500/30 p-4 rounded border border-blue-400/20">
+                          <div className="bg-blue-500/20 backdrop-blur-md p-4 rounded border border-blue-400/30 shadow-lg">
                         <div className="font-medium text-blue-200 text-sm">Total Windows</div>
                         <div className="text-3xl font-bold text-white">{getCurrentPropertyData().totalWindows}</div>
                       </div>
-                      <div className="bg-green-500/30 p-4 rounded border border-green-400/20">
+                          <div className="bg-green-500/20 backdrop-blur-md p-4 rounded border border-green-400/30 shadow-lg">
                         <div className="font-medium text-green-200 text-sm">Average Size</div>
                         <div className="text-xl font-bold text-white">{getCurrentPropertyData().averageWindowSize}</div>
                       </div>
-                      <div className="bg-purple-500/30 p-4 rounded border border-purple-400/20">
+                          <div className="bg-purple-500/20 backdrop-blur-md p-4 rounded border border-purple-400/30 shadow-lg">
                         <div className="font-medium text-purple-200 text-sm">Wall Ratio</div>
                         <div className="text-xl font-bold text-white">{(getCurrentPropertyData().windowWallRatio * 100).toFixed(1)}%</div>
-                      </div>
-                    </div>
-                    <div className="mt-4 grid grid-cols-2 gap-4">
-                      <div className="text-white/70">Building Orientation: <span className="text-white font-medium">{getCurrentPropertyData().buildingOrientation}</span></div>
-                      <div className="text-white/70">Indoor Temperature: <span className="text-white font-medium">{getCurrentPropertyData().indoorTemperature}</span></div>
                     </div>
                     </div>
                     
-                  {/* Recommended Solution */}
-                  <div className="bg-black/30 p-6 rounded-lg border border-white/10">
-                    <div className="flex items-center gap-3 mb-4">
-                      <Settings className="w-6 h-6 text-yellow-400" />
-                      <h3 className="text-xl font-semibold text-white">Recommended Solution</h3>
+                        {/* Detailed Window Size Distribution */}
+                        {getCurrentPropertyData().windowSizeDistribution && (
+                          <div className="mt-6">
+                            <h4 className="text-lg font-semibold text-white mb-3">Window Size Distribution</h4>
+                            <p className="text-sm text-white/70 mb-4">
+                              Window sizes vary across the building with different configurations for optimal lighting and structural requirements:
+                            </p>
+                            <div className="grid grid-cols-2 gap-3">
+                              {Object.entries(getCurrentPropertyData().windowSizeDistribution).map(([type, data]: [string, any]) => (
+                                <div key={type} className="bg-white/5 backdrop-blur-sm p-4 rounded border border-white/10">
+                                  <div className="flex justify-between items-start mb-2">
+                                    <div className="text-white font-medium capitalize">{type} Windows</div>
+                                    <div className="text-xs text-white/60 bg-white/10 px-2 py-1 rounded">
+                                      {data.percentage}%
                     </div>
-                    <div className="bg-yellow-500/20 p-3 rounded border border-yellow-400/30 mb-4">
-                      <p className="text-xs text-yellow-200">
-                        💡 Projections based on similar building case studies and industry benchmarks
-                      </p>
-                    </div>
-                    <div className="space-y-4">
-                      <div className="bg-gradient-to-r from-yellow-500/20 to-orange-500/20 p-6 rounded border border-yellow-400/20">
-                        <div className="font-bold text-yellow-200 text-2xl">{getCurrentPropertyData().energyAnalysis.recommendedSolution}</div>
-                        <div className="grid grid-cols-2 gap-6 mt-4">
-                          <div>
-                            <div className="text-white/70 text-sm">Energy Savings</div>
-                            <div className="text-white font-bold text-xl">{getCurrentPropertyData().energyAnalysis.energySavings}</div>
                           </div>
-                          <div>
-                            <div className="text-white/70 text-sm">Comfort Improvement</div>
-                            <div className="text-white font-bold text-xl">{getCurrentPropertyData().energyAnalysis.comfortImprovement}</div>
+                                  <div className="text-cyan-200 text-sm mb-1">{data.size}</div>
+                                  <div className="text-white font-bold text-lg">{data.count} windows</div>
                           </div>
-                          <div>
-                            <div className="text-white/70 text-sm">Payback Period</div>
-                            <div className="text-white font-bold text-xl">{getCurrentPropertyData().energyAnalysis.paybackPeriod}</div>
+                              ))}
                           </div>
-                          <div>
-                            <div className="text-white/70 text-sm">Total Investment</div>
-                            <div className="text-white font-bold text-xl">{getCurrentPropertyData().energyAnalysis.totalInvestment}</div>
                           </div>
-                        </div>
-                      </div>
+                        )}
+
+                        <div className="mt-4 grid grid-cols-2 gap-4">
+                          <div className="text-white/70">Building Orientation: <span className="text-white font-medium">{getCurrentPropertyData().buildingOrientation}</span></div>
+                          <div className="text-white/70">Indoor Temperature: <span className="text-white font-medium">{getCurrentPropertyData().indoorTemperature}</span></div>
                     </div>
                   </div>
 
-                  {/* Climate Data */}
-                  <div className="bg-black/30 p-6 rounded-lg border border-white/10">
+                      {/* Energy & Cost Analysis */}
+                      <div className="bg-white/10 backdrop-blur-md p-6 rounded-lg border border-white/20 shadow-lg">
                     <div className="flex items-center gap-3 mb-4">
-                      <Clock className="w-6 h-6 text-blue-400" />
-                      <h3 className="text-xl font-semibold text-white">Climate & Environmental Data</h3>
+                          <Grid3X3 className="w-6 h-6 text-green-400" />
+                          <h3 className="text-xl font-semibold text-white">Energy & Cost Analysis</h3>
                     </div>
-                    <div className="bg-blue-500/20 p-3 rounded border border-blue-400/30 mb-4">
-                      <p className="text-xs text-blue-200">
-                        🌡️ Weather data sourced from NOAA and local meteorological stations
+                        <div className="bg-green-500/20 backdrop-blur-md p-3 rounded border border-green-400/30 mb-4">
+                          <p className="text-xs text-green-200">
+                            ⚡ Estimates based on utility data research and building performance studies
                       </p>
                     </div>
-                    <div className="space-y-6">
-                      <div>
-                        <div className="font-medium text-white mb-3">Monthly Temperature Range</div>
-                        <div className="grid grid-cols-4 gap-3">
-                          {Object.entries(getCurrentPropertyData().monthlyTemperatures).map(([month, temp]) => (
-                            <div key={month} className="bg-black/20 p-3 rounded">
-                              <div className="text-white/60 text-sm">{month.slice(0, 3)}</div>
-                              <div className="text-white font-mono text-sm">{temp}</div>
+                        <div className="grid grid-cols-2 gap-6">
+                          <div className="space-y-4">
+                            <div className="bg-blue-500/20 backdrop-blur-md p-4 rounded border border-blue-400/30 shadow-lg">
+                              <div className="font-medium text-blue-200 text-sm">Annual Energy Consumption</div>
+                              <div className="text-2xl font-bold text-white">{availableProperties.find(p => p.id === selectedProperty)?.data.energyConsumption}</div>
                         </div>
-                      ))}
+                            <div className="bg-red-500/20 backdrop-blur-md p-4 rounded border border-red-400/30 shadow-lg">
+                              <div className="font-medium text-red-200 text-sm">Current Annual Cost</div>
+                              <div className="text-2xl font-bold text-white">{availableProperties.find(p => p.id === selectedProperty)?.data.energyAnalysis.currentAnnualCost}</div>
                     </div>
                   </div>
-                      <div>
-                        <div className="font-medium text-white mb-3">Solar Irradiance (kWh/m²/day)</div>
-                        <div className="grid grid-cols-6 gap-3">
-                          {Object.entries(getCurrentPropertyData().solarIrradiance).map(([month, value]) => (
-                            <div key={month} className="bg-yellow-500/20 p-3 rounded border border-yellow-400/20">
-                              <div className="text-yellow-200 text-sm">{month.slice(0, 3)}</div>
-                              <div className="text-white font-bold">{value}</div>
+                          <div className="space-y-4">
+                            <div className="bg-green-500/20 backdrop-blur-md p-4 rounded border border-green-400/30 shadow-lg">
+                              <div className="font-medium text-green-200 text-sm">Projected Savings</div>
+                              <div className="text-2xl font-bold text-white">{getCurrentPropertyData().energyAnalysis.projectedSavings}</div>
                             </div>
-                      ))}
+                            <div className="bg-orange-500/20 backdrop-blur-md p-4 rounded border border-orange-400/30 shadow-lg">
+                              <div className="font-medium text-orange-200 text-sm">Implementation Cost</div>
+                              <div className="text-2xl font-bold text-white">{getCurrentPropertyData().energyAnalysis.implementationCost}</div>
                     </div>
                   </div>
                 </div>
@@ -1918,7 +1994,7 @@ const MapViewer = () => {
                   <div className="space-y-4">
                     <Button
                       onClick={() => setShowWindows(!showWindows)}
-                      className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 text-lg"
+                          className="w-full bg-blue-500/20 backdrop-blur-md border border-blue-400/30 hover:bg-blue-500/30 text-white py-3 text-lg shadow-lg"
                     >
                       <Eye className="w-5 h-5 mr-3" />
                       {showWindows ? 'Hide' : 'Show'} Window Locations
@@ -1929,12 +2005,12 @@ const MapViewer = () => {
                         onClick={() => {
                           if (map) {
                             map.setCenter({ lat: getCurrentPropertyData().coordinates.lat, lng: getCurrentPropertyData().coordinates.lng });
-                            map.setZoom(21);
+                                map.setZoom(17);
                             map.setTilt(45);
                           }
                         }}
                         variant="outline"
-                        className="bg-black/30 border-white/20 text-white hover:bg-black/40 py-3"
+                            className="bg-white/10 backdrop-blur-md border border-white/30 text-white hover:bg-white/20 py-3 shadow-lg"
                       >
                         <Navigation className="w-5 h-5 mr-2" />
                         Center View
@@ -1942,199 +2018,19 @@ const MapViewer = () => {
                       <Button
                         onClick={() => enableStreetView()}
                         variant="outline"
-                        className="bg-black/30 border-white/20 text-white hover:bg-black/40 py-3"
+                            className="bg-white/10 backdrop-blur-md border border-white/30 text-white hover:bg-white/20 py-3 shadow-lg"
                       >
                         <Eye className="w-5 h-5 mr-2" />
                         Street View
                       </Button>
                         </div>
-                    </div>
-
-                  {/* Property Switcher - Moved to Bottom */}
-                  <div className="bg-black/30 p-6 rounded-lg border border-white/10">
-                    <div className="flex items-center gap-3 mb-4">
-                      <MapPin className="w-6 h-6 text-purple-400" />
-                      <h3 className="text-xl font-semibold text-white">Select Property</h3>
-                    </div>
-                    <div className="space-y-4">
-                      {availableProperties.map((property) => (
-                        <div
-                          key={property.id}
-                          onClick={() => {
-                            setSelectedProperty(property.id);
-                            setIsAnalyzing(true);
-                            setAnalysisProgress(0);
-                            
-                            if (map) {
-                              // Clear previous analysis markers and circle
-                              analysisMarkers.forEach(marker => marker.setMap(null));
-                              if (analysisCircle) analysisCircle.setMap(null);
-                              setAnalysisMarkers([]);
-                              setAnalysisCircle(null);
-
-                              // Start progress animation
-                              const progressInterval = setInterval(() => {
-                                setAnalysisProgress(prev => {
-                                  if (prev >= 100) {
-                                    clearInterval(progressInterval);
-                                    setIsAnalyzing(false);
-                                    return 100;
-                                  }
-                                  return prev + 2;
-                                });
-                              }, 100);
-
-                              // Fancy transition to property
-                              map.panTo(property.data.coordinates);
-                              setTimeout(() => {
-                                map.setZoom(22);
-                                map.setTilt(67.5);
-                                map.setHeading(45);
-                                setCurrentLocation(property.data.name);
-                                
-                                // Add analysis highlight circle with pulsing effect
-                                const circle = new window.google.maps.Circle({
-                                  strokeColor: '#3b82f6',
-                                  strokeOpacity: 0.8,
-                                  strokeWeight: 3,
-                                  fillColor: '#3b82f6',
-                                  fillOpacity: 0.2,
-                                  map: map,
-                                  center: property.data.coordinates,
-                                  radius: 100
-                                });
-                                setAnalysisCircle(circle);
-
-                                // Add research data points around the building
-                                const analysisPoints = [
-                                  { lat: property.data.coordinates.lat + 0.0008, lng: property.data.coordinates.lng + 0.0008, label: 'Energy Research', color: '#ef4444', source: 'Based on public utility data' },
-                                  { lat: property.data.coordinates.lat - 0.0008, lng: property.data.coordinates.lng + 0.0008, label: 'Window Analysis', color: '#10b981', source: 'From satellite imagery study' },
-                                  { lat: property.data.coordinates.lat + 0.0008, lng: property.data.coordinates.lng - 0.0008, label: 'Climate Research', color: '#f59e0b', source: 'NOAA weather data analysis' },
-                                  { lat: property.data.coordinates.lat - 0.0008, lng: property.data.coordinates.lng - 0.0008, label: 'Efficiency Study', color: '#8b5cf6', source: 'Industry benchmark comparison' },
-                                  { lat: property.data.coordinates.lat, lng: property.data.coordinates.lng + 0.0012, label: 'Thermal Research', color: '#06b6d4', source: 'From building documentation' },
-                                  { lat: property.data.coordinates.lat, lng: property.data.coordinates.lng - 0.0012, label: 'Structural Data', color: '#ec4899', source: 'Public building records' }
-                                ];
-
-                                const newMarkers: any[] = [];
-                                analysisPoints.forEach((point, index) => {
-                                  setTimeout(() => {
-                                    const marker = new window.google.maps.Marker({
-                                      position: point,
-                                      map: map,
-                                      title: point.label,
-                                      icon: {
-                                        url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
-                                          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                            <circle cx="12" cy="12" r="10" fill="${point.color}" stroke="#ffffff" stroke-width="2"/>
-                                            <circle cx="12" cy="12" r="4" fill="#ffffff"/>
-                                            <circle cx="12" cy="12" r="2" fill="${point.color}"/>
-                                          </svg>
-                                        `),
-                                        scaledSize: new window.google.maps.Size(24, 24),
-                                        anchor: new window.google.maps.Point(12, 12)
-                                      },
-                                      animation: window.google.maps.Animation.DROP
-                                    });
-
-                                    // Add info window for research data points
-                                    const infoWindow = new window.google.maps.InfoWindow({
-                                      content: `
-                                        <div style="padding: 10px; max-width: 250px;">
-                                          <h4 style="margin: 0 0 6px 0; color: #1f2937; font-weight: bold;">${point.label}</h4>
-                                          <p style="margin: 0 0 4px 0; color: #6b7280; font-size: 12px;">${property.data.name}</p>
-                                          <p style="margin: 0 0 6px 0; color: #6b7280; font-size: 11px; font-style: italic;">${point.source}</p>
-                                          <div style="margin-top: 6px; padding: 3px 8px; background: ${point.color}; color: white; border-radius: 4px; font-size: 10px; display: inline-block;">
-                                            RESEARCH DATA
-                                          </div>
-                                        </div>
-                                      `
-                                    });
-
-                                    marker.addListener('click', () => {
-                                      infoWindow.open(map, marker);
-                                    });
-
-                                    newMarkers.push(marker);
-                                  }, index * 200);
-                                });
-                                setAnalysisMarkers(newMarkers);
-                              }, 500);
-                            }
-                          }}
-                          className={`p-4 rounded-lg border cursor-pointer transition-all duration-300 hover:scale-105 ${
-                            selectedProperty === property.id
-                              ? 'bg-blue-600/30 border-blue-400/50 shadow-lg shadow-blue-500/20'
-                              : 'bg-black/20 border-white/20 hover:bg-black/30 hover:border-white/30'
-                          }`}
-                        >
-                          <div className="flex items-center gap-4">
-                            <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                              selectedProperty === property.id ? 'bg-blue-500' : 'bg-gray-600'
-                            }`}>
-                              <Building className="w-6 h-6 text-white" />
-                            </div>
-                            <div className="flex-1">
-                              <div className="font-semibold text-lg text-white">{property.data.name}</div>
-                              <div className="text-sm text-white/70 mt-1">
-                                {property.data.buildingType} • Built {property.data.yearBuilt} • {property.data.floors} floors
-                              </div>
-                              <div className="text-xs text-white/60 mt-1">{property.data.address}</div>
-                            </div>
-                            {selectedProperty === property.id && (
-                              <div className="flex flex-col items-end gap-2">
-                                <div className="flex items-center gap-2">
-                                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                                  <span className="text-xs text-green-400 font-medium">
-                                    {isAnalyzing ? 'RESEARCHING' : 'DATA READY'}
-                                  </span>
-                                </div>
-                                {isAnalyzing && (
-                                  <div className="w-24">
-                                    <div className="flex justify-between text-xs text-white/60 mb-1">
-                                      <span>Progress</span>
-                                      <span>{analysisProgress}%</span>
-                                    </div>
-                                    <div className="w-full bg-gray-700 rounded-full h-1.5">
-                                      <div 
-                                        className="bg-green-400 h-1.5 rounded-full transition-all duration-300"
-                                        style={{ width: `${analysisProgress}%` }}
-                                      ></div>
                                     </div>
                                   </div>
                                 )}
                               </div>
                             )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
                   </div>
                 </div>
-              )}
-
-              {/* Fallback for other buildings */}
-              {selectedBuilding && selectedBuilding.id !== 'mgm-grand-detroit' && (
-                <div className="bg-black/30 p-6 rounded-lg border border-white/10">
-                  <div className="flex items-center gap-3 mb-3">
-                    <Info className="w-6 h-6 text-blue-400" />
-                    <h3 className="text-xl font-semibold text-white">Current Building</h3>
-                  </div>
-                <div className="space-y-3">
-                    <div className="text-white text-lg">{selectedBuilding.name}</div>
-                    {selectedBuilding.address && (
-                      <div className="text-white/70 flex items-center gap-2">
-                        <MapPin className="w-4 h-4" />
-                        {selectedBuilding.address}
-                  </div>
-                    )}
-                    <div className="text-white/70">
-                      Coords: {selectedBuilding.latitude.toFixed(6)}, {selectedBuilding.longitude.toFixed(6)}
-                        </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </Card>
         )}
 
         {/* Instructions */}
