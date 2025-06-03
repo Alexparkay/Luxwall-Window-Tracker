@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -35,57 +36,50 @@
     --radius: 0.5rem;
 
     --sidebar-background: 0 0% 98%;
-
     --sidebar-foreground: 240 5.3% 26.1%;
-
     --sidebar-primary: 240 5.9% 10%;
-
     --sidebar-primary-foreground: 0 0% 98%;
-
     --sidebar-accent: 240 4.8% 95.9%;
-
     --sidebar-accent-foreground: 240 5.9% 10%;
-
     --sidebar-border: 220 13% 91%;
-
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
+    --background: 10 10% 4%;
     --foreground: 210 40% 98%;
 
-    --card: 222.2 84% 4.9%;
+    --card: 10 10% 10%;
     --card-foreground: 210 40% 98%;
 
-    --popover: 222.2 84% 4.9%;
+    --popover: 10 10% 10%;
     --popover-foreground: 210 40% 98%;
 
-    --primary: 210 40% 98%;
+    --primary: 217.2 91.2% 59.8%;
     --primary-foreground: 222.2 47.4% 11.2%;
 
-    --secondary: 217.2 32.6% 17.5%;
+    --secondary: 10 10% 16%;
     --secondary-foreground: 210 40% 98%;
 
-    --muted: 217.2 32.6% 17.5%;
+    --muted: 10 10% 16%;
     --muted-foreground: 215 20.2% 65.1%;
 
-    --accent: 217.2 32.6% 17.5%;
+    --accent: 10 10% 16%;
     --accent-foreground: 210 40% 98%;
 
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
+    --border: 10 10% 16%;
+    --input: 10 10% 16%;
+    --ring: 217.2 91.2% 59.8%;
+    --sidebar-background: 10 10% 6%;
     --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary: 217.2 91.2% 59.8%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent: 10 10% 16%;
     --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-border: 10 10% 16%;
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
 }
@@ -96,6 +90,103 @@
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-glass-background-primary text-glass-text-primary font-inter antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+@layer components {
+  /* Glassmorphism Panel */
+  .glass-panel {
+    @apply bg-glass-background-secondary/70 backdrop-blur-12 border border-white/10 shadow-lg shadow-black/20;
+  }
+
+  /* Modern Card */
+  .modern-card {
+    @apply glass-panel rounded-xl p-6 transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-glass-accent-primary/20;
+  }
+
+  /* Dashboard Grid */
+  .dashboard-grid {
+    @apply grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4;
+  }
+
+  /* Typography */
+  .heading-1 {
+    @apply text-4xl font-semibold text-glass-text-primary;
+  }
+
+  .heading-2 {
+    @apply text-3xl font-semibold text-glass-text-primary;
+  }
+
+  .heading-3 {
+    @apply text-2xl font-semibold text-glass-text-primary;
+  }
+
+  .body-text {
+    @apply text-base font-normal text-glass-text-secondary;
+  }
+
+  .small-text {
+    @apply text-sm font-normal text-glass-text-muted;
+  }
+
+  /* Button Variants */
+  .btn-glass {
+    @apply glass-panel px-6 py-3 rounded-lg font-medium transition-all duration-300 hover:brightness-110 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-glass-accent-primary/50;
+  }
+
+  .btn-primary {
+    @apply btn-glass bg-glass-accent-primary text-white hover:bg-glass-accent-primary/90;
+  }
+
+  .btn-secondary {
+    @apply btn-glass bg-glass-background-accent text-glass-text-primary hover:bg-glass-background-accent/80;
+  }
+
+  /* Input Styles */
+  .input-glass {
+    @apply glass-panel px-4 py-3 rounded-lg bg-glass-background-accent/50 text-glass-text-primary placeholder-glass-text-muted focus:outline-none focus:ring-2 focus:ring-glass-accent-primary/50 transition-all duration-300;
+  }
+
+  /* Sidebar Styles */
+  .sidebar-nav {
+    @apply glass-panel h-full overflow-y-auto;
+  }
+
+  .sidebar-item {
+    @apply flex items-center gap-3 px-4 py-3 rounded-lg text-glass-text-secondary hover:bg-glass-background-accent/50 hover:text-glass-text-primary transition-all duration-300 cursor-pointer;
+  }
+
+  .sidebar-item.active {
+    @apply bg-glass-accent-primary/20 text-glass-accent-primary border-l-4 border-glass-accent-primary;
+  }
+
+  /* Animation utilities */
+  .animate-enter {
+    @apply animate-fade-in;
+  }
+
+  /* Scrollbar Styling */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    @apply bg-glass-background-accent/20 rounded-full;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-glass-text-muted/50 rounded-full hover:bg-glass-text-muted/70;
+  }
+
+  /* Loading spinner */
+  .loading-spinner {
+    @apply animate-spin rounded-full border-2 border-glass-background-accent border-t-glass-accent-primary;
   }
 }

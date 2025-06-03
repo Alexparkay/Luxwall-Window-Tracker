@@ -12,6 +12,11 @@ declare global {
         Size: any;
         Point: any;
         LatLng: any;
+        RenderingType?: {
+          VECTOR: string;
+          RASTER: string;
+        };
+        renderingType?: string;
         places: {
           Autocomplete: any;
           PlacesService: any;
